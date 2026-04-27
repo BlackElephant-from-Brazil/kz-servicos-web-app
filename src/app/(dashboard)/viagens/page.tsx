@@ -2,8 +2,10 @@
 
 import { useEffect, useState, useCallback } from "react";
 import KanbanBoard from "@/components/KanbanBoard";
+import TripDetailModal from "@/components/TripDetailModal";
 import NovaViagemForm from "@/components/forms/NovaViagemForm";
-import { fetchTrips } from "@/lib/api";
+import { useToast } from "@/components/Toast";
+import { fetchTrips, updateTripStatus } from "@/lib/api";
 import type { Trip, TripStatus } from "@/types/database";
 
 const tripColumnConfig: { id: TripStatus; title: string; color: string }[] = [
@@ -33,9 +35,11 @@ function formatDate(dateStr: string) {
 }
 
 export default function ViagensPage() {
+  const { toast } = useToast();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
 
   const loadTrips = useCallback(() => {
     setLoading(true);
@@ -48,6 +52,32 @@ export default function ViagensPage() {
   useEffect(() => {
     loadTrips();
   }, [loadTrips]);
+
+  const handleCardMove = useCallback(
+    async (cardId: string, _fromColumnId: string, toColumnId: string) => {
+      const newStatus = toColumnId as TripStatus;
+      // Optimistic update
+      setTrips((prev) =>
+        prev.map((t) => (t.id === cardId ? { ...t, status: newStatus } : t))
+      );
+      try {
+        await updateTripStatus(cardId, newStatus);
+        toast("success", "Status da viagem atualizado");
+      } catch {
+        toast("danger", "Erro ao atualizar status");
+        loadTrips(); // Rollback
+      }
+    },
+    [toast, loadTrips]
+  );
+
+  const handleCardClick = useCallback(
+    (cardId: string) => {
+      const trip = trips.find((t) => t.id === cardId);
+      if (trip) setSelectedTrip(trip);
+    },
+    [trips]
+  );
 
   const columns = tripColumnConfig.map((col) => {
     const colTrips = trips.filter((t) => t.status === col.id);
@@ -63,6 +93,7 @@ export default function ViagensPage() {
       })),
     };
   });
+
   return (
     <div>
       {/* Page header */}
@@ -85,13 +116,24 @@ export default function ViagensPage() {
       {loading ? (
         <div className="text-center py-16 text-contrast text-sm">Carregando viagens...</div>
       ) : (
-        <KanbanBoard columns={columns} />
+        <KanbanBoard
+          columns={columns}
+          onCardMove={handleCardMove}
+          onCardClick={handleCardClick}
+        />
       )}
 
       <NovaViagemForm
         open={showForm}
         onClose={() => setShowForm(false)}
         onSuccess={loadTrips}
+      />
+
+      <TripDetailModal
+        trip={selectedTrip}
+        open={!!selectedTrip}
+        onClose={() => setSelectedTrip(null)}
+        onUpdate={loadTrips}
       />
     </div>
   );

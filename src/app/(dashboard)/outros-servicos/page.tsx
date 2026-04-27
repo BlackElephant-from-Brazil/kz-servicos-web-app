@@ -2,8 +2,10 @@
 
 import { useEffect, useState, useCallback } from "react";
 import KanbanBoard from "@/components/KanbanBoard";
+import ServiceDetailModal from "@/components/ServiceDetailModal";
 import NovaSolicitacaoForm from "@/components/forms/NovaSolicitacaoForm";
-import { fetchServiceRequests } from "@/lib/api";
+import { useToast } from "@/components/Toast";
+import { fetchServiceRequests, updateServiceRequestStatus } from "@/lib/api";
 import type { ServiceRequest, ServiceRequestStatus } from "@/types/database";
 
 const serviceColumnConfig: {
@@ -31,9 +33,11 @@ function formatDate(dateStr: string) {
 }
 
 export default function OutrosServicosPage() {
+  const { toast } = useToast();
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null);
 
   const loadRequests = useCallback(() => {
     setLoading(true);
@@ -46,6 +50,32 @@ export default function OutrosServicosPage() {
   useEffect(() => {
     loadRequests();
   }, [loadRequests]);
+
+  const handleCardMove = useCallback(
+    async (cardId: string, _fromColumnId: string, toColumnId: string) => {
+      const newStatus = toColumnId as ServiceRequestStatus;
+      // Optimistic update
+      setRequests((prev) =>
+        prev.map((r) => (r.id === cardId ? { ...r, status: newStatus } : r))
+      );
+      try {
+        await updateServiceRequestStatus(cardId, newStatus);
+        toast("success", "Status do serviço atualizado");
+      } catch {
+        toast("danger", "Erro ao atualizar status");
+        loadRequests(); // Rollback
+      }
+    },
+    [toast, loadRequests]
+  );
+
+  const handleCardClick = useCallback(
+    (cardId: string) => {
+      const req = requests.find((r) => r.id === cardId);
+      if (req) setSelectedRequest(req);
+    },
+    [requests]
+  );
 
   const columns = serviceColumnConfig.map((col) => {
     const colRequests = requests.filter((r) => r.status === col.id);
@@ -88,13 +118,23 @@ export default function OutrosServicosPage() {
       {loading ? (
         <div className="text-center py-16 text-contrast text-sm">Carregando serviços...</div>
       ) : (
-        <KanbanBoard columns={columns} />
+        <KanbanBoard
+          columns={columns}
+          onCardMove={handleCardMove}
+          onCardClick={handleCardClick}
+        />
       )}
 
       <NovaSolicitacaoForm
         open={showForm}
         onClose={() => setShowForm(false)}
         onSuccess={loadRequests}
+      />
+
+      <ServiceDetailModal
+        request={selectedRequest}
+        open={!!selectedRequest}
+        onClose={() => setSelectedRequest(null)}
       />
     </div>
   );

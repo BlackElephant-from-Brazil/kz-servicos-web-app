@@ -2,7 +2,12 @@ import { supabase } from "@/lib/supabase";
 import type {
   User,
   Trip,
+  TripStatus,
+  TripDriverCandidate,
+  TripDriverCandidateStatus,
+  TripStatusHistory,
   ServiceRequest,
+  ServiceRequestStatus,
   DriverProfile,
   ProviderProfile,
   Vehicle,
@@ -90,6 +95,143 @@ export async function fetchServiceRequests(): Promise<ServiceRequest[]> {
     .order("service_date", { ascending: false });
   if (error) throw error;
   return data as ServiceRequest[];
+}
+
+// ─── Update Trip Status ────────────────────────────────────
+export async function updateTripStatus(id: string, status: TripStatus): Promise<void> {
+  const { error } = await supabase
+    .from("trips")
+    .update({ status })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+// ─── Fetch Single Trip ─────────────────────────────────────
+export async function fetchTripById(id: string): Promise<Trip> {
+  const { data, error } = await supabase
+    .from("trips")
+    .select(
+      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), service_categories(*), users!client_id(*), driver_profiles(*, provider_profiles(*, users(*)))"
+    )
+    .eq("id", id)
+    .single();
+  if (error) throw error;
+  return data as Trip;
+}
+
+// ─── Trip Status History ───────────────────────────────────
+export async function fetchTripStatusHistory(tripId: string): Promise<TripStatusHistory[]> {
+  const { data, error } = await supabase
+    .from("trip_status_history")
+    .select("*")
+    .eq("trip_id", tripId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as TripStatusHistory[];
+}
+
+// ─── Approve Trip (under_review → searching_drivers) ──────
+export async function approveTrip(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("trips")
+    .update({ status: "searching_drivers" })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+// ─── Reject Trip (under_review → open) ────────────────────
+export async function rejectTrip(id: string, reason: string): Promise<void> {
+  const { error } = await supabase
+    .from("trips")
+    .update({ status: "open" })
+    .eq("id", id);
+  if (error) throw error;
+  // Insert history record with reason (trigger already inserts one without observations)
+  if (reason.trim()) {
+    await supabase.from("trip_status_history").insert({
+      trip_id: id,
+      from_status: "under_review",
+      to_status: "open",
+      changed_by: (await supabase.auth.getUser()).data.user?.id ?? id,
+      observations: reason.trim(),
+    });
+  }
+}
+
+// ─── Cancel Trip (any → cancelled) ────────────────────────
+export async function cancelTrip(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("trips")
+    .update({ status: "cancelled", cancelled_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+// ─── Trip Driver Candidates ────────────────────────────────
+export async function fetchTripDriverCandidates(tripId: string): Promise<TripDriverCandidate[]> {
+  const { data, error } = await supabase
+    .from("trip_driver_candidates")
+    .select("*, driver_profiles(*, provider_profiles(*, users(*)))")
+    .eq("trip_id", tripId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as TripDriverCandidate[];
+}
+
+export async function addTripDriverCandidate(
+  tripId: string,
+  driverProfileId: string
+): Promise<TripDriverCandidate> {
+  const { data, error } = await supabase
+    .from("trip_driver_candidates")
+    .insert({ trip_id: tripId, driver_profile_id: driverProfileId, status: "pending" })
+    .select("*, driver_profiles(*, provider_profiles(*, users(*)))")
+    .single();
+  if (error) throw error;
+  return data as TripDriverCandidate;
+}
+
+export async function removeTripDriverCandidate(
+  tripId: string,
+  driverProfileId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("trip_driver_candidates")
+    .delete()
+    .eq("trip_id", tripId)
+    .eq("driver_profile_id", driverProfileId);
+  if (error) throw error;
+}
+
+export async function updateTripDriverCandidateStatus(
+  tripId: string,
+  driverProfileId: string,
+  status: TripDriverCandidateStatus
+): Promise<TripDriverCandidate> {
+  const { data, error } = await supabase
+    .from("trip_driver_candidates")
+    .update({
+      status,
+      responded_at: status === "pending" ? null : new Date().toISOString(),
+    })
+    .eq("trip_id", tripId)
+    .eq("driver_profile_id", driverProfileId)
+    .select("*, driver_profiles(*, provider_profiles(*, users(*)))")
+    .single();
+  if (error) throw error;
+  return data as TripDriverCandidate;
+}
+
+// ─── Update Service Request Status ─────────────────────────
+export async function updateServiceRequestStatus(
+  id: string,
+  status: ServiceRequestStatus
+): Promise<void> {
+  const { error } = await supabase
+    .from("service_requests")
+    .update({ status })
+    .eq("id", id);
+  if (error) throw error;
 }
 
 // ─── Driver Profiles ───────────────────────────────────────

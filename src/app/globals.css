@@ -90,6 +90,16 @@ h1, h2, h3, h4, h5, h6 {
   to { opacity: 0; }
 }
 
+@keyframes modal-in {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes modal-out {
+  from { transform: scale(1); opacity: 1; }
+  to { transform: scale(0.95); opacity: 0; }
+}
+
 /* Toast animations */
 @keyframes toast-in {
   from { transform: translateX(100%); opacity: 0; }
@@ -111,4 +121,50 @@ h1, h2, h3, h4, h5, h6 {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Custom scrollbar */
+*,
+*::before,
+*::after {
+  scrollbar-width: thin !important;
+  scrollbar-color: var(--kz-surface-hover) transparent !important;
+}
+
+*::-webkit-scrollbar {
+  width: 6px !important;
+  height: 6px !important;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--kz-surface-hover) !important;
+  border-radius: 9999px !important;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--kz-contrast) !important;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent !important;
+}
+
+*::-webkit-scrollbar-button {
+  display: none !important;
+}
+
+/* Kanban DnD animations */
+@keyframes card-highlight {
+  0%, 100% { box-shadow: 0 0 0 2px transparent; }
+  50% { box-shadow: 0 0 0 2px #FEBF22; }
+}
+
+@keyframes card-settle {
+  0% { transform: scale(1.04); }
+  50% { transform: scale(0.98); }
+  100% { transform: scale(1); }
 }

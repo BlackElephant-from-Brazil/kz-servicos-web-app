@@ -20,6 +20,8 @@ interface NovoMotoristaFormProps {
 
 const inputClass =
   "w-full rounded-lg bg-background border border-border text-dark placeholder:text-contrast/40 focus:ring-primary focus:ring-1 focus:outline-none px-3 py-2 text-sm font-body";
+const inputErrorClass =
+  "w-full rounded-lg bg-background border border-danger text-danger placeholder:text-contrast/40 focus:ring-danger focus:ring-1 focus:outline-none px-3 py-2 text-sm font-body";
 const labelClass = "block text-sm font-body text-contrast mb-1";
 const sectionClass = "text-sm font-heading font-bold text-dark mb-3 mt-2";
 
@@ -32,6 +34,7 @@ export default function NovoMotoristaForm({
 }: NovoMotoristaFormProps) {
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
+  const [emailError, setEmailError] = useState("");
 
   // Dados do motorista
   const [fullName, setFullName] = useState("");
@@ -66,6 +69,7 @@ export default function NovoMotoristaForm({
     setColor("");
     setLicensePlate("");
     setPassengerCapacity("");
+    setEmailError("");
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -76,6 +80,7 @@ export default function NovoMotoristaForm({
     }
 
     setSubmitting(true);
+    setEmailError("");
     try {
       // 1. Create user
       const user = await createUser({
@@ -126,8 +131,15 @@ export default function NovoMotoristaForm({
       resetForm();
       onSuccess();
       onClose();
-    } catch {
-      toast("danger", "Erro ao criar motorista. Tente novamente.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      if (message.includes("already been registered")) {
+        const errorMsg = "Este e-mail já está cadastrado.";
+        setEmailError(errorMsg);
+        toast("danger", errorMsg);
+      } else {
+        toast("danger", "Erro ao criar motorista. Tente novamente.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -188,10 +200,16 @@ export default function NovoMotoristaForm({
             id="driver-email"
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              if (emailError) setEmailError("");
+            }}
             placeholder="email@exemplo.com"
-            className={inputClass}
+            className={emailError ? inputErrorClass : inputClass}
           />
+          {emailError && (
+            <p className="mt-1 text-xs text-danger font-body">{emailError}</p>
+          )}
         </div>
 
         <div>

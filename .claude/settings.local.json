@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/guilh/.claude/projects/c--Users-guilh-OneDrive-Documents-BlackElephant-Clientes-KZ-kz-servicos-web-app/memory/**)",
+      "Bash(npx tsc *)",
+      "Bash(supabase --version)",
+      "Bash(git -C .github/skills/kz-database status --short)",
+      "Bash(git -C .github/skills/kz-database status)"
+    ]
+  }
+}

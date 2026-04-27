@@ -200,6 +200,36 @@ export interface Debito {
   metodo_pagamento: PaymentMethod | null;
 }
 
+export type TripDriverCandidateStatus = "pending" | "accepted" | "rejected";
+
+export interface TripDriverCandidate {
+  id: string;
+  trip_id: string;
+  driver_profile_id: string;
+  status: TripDriverCandidateStatus;
+  invited_at: string;
+  responded_at: string | null;
+  observations: string | null;
+  created_at: string;
+  // Relations
+  driver_profiles?: DriverProfile & {
+    provider_profiles?: ProviderProfile & {
+      users?: User;
+    };
+  };
+}
+
+export interface TripStatusHistory {
+  id: string;
+  trip_id: string;
+  from_status: string | null;
+  to_status: string;
+  changed_by: string;
+  observations: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
 // Supabase Database type for the client
 export interface Database {
   public: {
