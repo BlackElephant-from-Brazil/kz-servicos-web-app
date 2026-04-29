@@ -12,7 +12,7 @@ interface NovoUsuarioFormProps {
 }
 
 const inputClass =
-  "w-full rounded-lg bg-background border border-border text-dark placeholder:text-contrast/40 focus:ring-primary focus:ring-1 focus:outline-none px-3 py-2 text-sm font-body";
+  "w-full rounded-lg bg-background border border-border text-dark placeholder:text-contrast/40 focus:ring-primary focus:ring-1 focus:outline-none px-3 py-2 text-base md:text-sm font-body";
 const labelClass = "block text-sm font-body text-contrast mb-1";
 
 export default function NovoUsuarioForm({
