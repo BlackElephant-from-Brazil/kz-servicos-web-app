@@ -141,21 +141,12 @@ export async function approveTrip(id: string): Promise<void> {
 
 // ─── Reject Trip (under_review → open) ────────────────────
 export async function rejectTrip(id: string, reason: string): Promise<void> {
-  const { error } = await supabase
-    .from("trips")
-    .update({ status: "open" })
-    .eq("id", id);
+  const trimmed = reason.trim();
+  const { error } = await supabase.rpc("reject_trip", {
+    p_trip_id: id,
+    p_reason: trimmed.length > 0 ? trimmed : null,
+  });
   if (error) throw error;
-  // Insert history record with reason (trigger already inserts one without observations)
-  if (reason.trim()) {
-    await supabase.from("trip_status_history").insert({
-      trip_id: id,
-      from_status: "under_review",
-      to_status: "open",
-      changed_by: (await supabase.auth.getUser()).data.user?.id ?? id,
-      observations: reason.trim(),
-    });
-  }
 }
 
 // ─── Cancel Trip (any → cancelled) ────────────────────────
