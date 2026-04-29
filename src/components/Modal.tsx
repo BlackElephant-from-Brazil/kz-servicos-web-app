@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
+import { useIsMobile } from "@/lib/hooks";
 
 interface ModalProps {
   open: boolean;
@@ -17,6 +18,7 @@ export default function Modal({
   children,
   footer,
 }: ModalProps) {
+  const isMobile = useIsMobile();
   const overlayRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const closingRef = useRef(false);
@@ -26,13 +28,16 @@ export default function Modal({
     closingRef.current = true;
     const overlay = overlayRef.current;
     const content = contentRef.current;
-    if (overlay) overlay.style.animation = "fade-out 200ms ease-in forwards";
-    if (content) content.style.animation = "modal-out 200ms ease-in forwards";
+    if (overlay) overlay.style.animation = "fade-out 300ms ease-in forwards";
+    if (content)
+      content.style.animation = isMobile
+        ? "slide-down 300ms ease-in forwards"
+        : "modal-out 300ms ease-in forwards";
     setTimeout(() => {
       closingRef.current = false;
       onClose();
-    }, 200);
-  }, [onClose]);
+    }, 300);
+  }, [onClose, isMobile]);
 
   useEffect(() => {
     if (!open) return;
@@ -63,8 +68,17 @@ export default function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="relative w-full max-w-lg mx-4 bg-surface border border-border rounded-xl flex flex-col max-h-[90vh]"
-        style={{ animation: "modal-in 300ms ease-out forwards" }}
+        className={
+          isMobile === true
+            ? "fixed bottom-0 inset-x-0 bg-surface border border-border rounded-t-2xl flex flex-col max-h-[90vh] overflow-y-auto"
+            : "relative w-full max-w-lg mx-4 bg-surface border border-border rounded-xl flex flex-col max-h-[90vh]"
+        }
+        style={{
+          animation:
+            isMobile === true
+              ? "slide-up 300ms ease-out forwards"
+              : "modal-in 300ms ease-out forwards",
+        }}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
