@@ -220,7 +220,7 @@ export default function FinanceiroPage() {
     <div>
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-3xl font-heading font-black text-dark">
+        <h1 className="text-xl md:text-3xl font-heading font-black text-dark">
           Financeiro
         </h1>
         <p className="text-contrast text-sm mt-1">
