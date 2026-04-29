@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import KanbanBoard from "@/components/KanbanBoard";
+import KanbanListView, { type KanbanListColumn } from "@/components/KanbanListView";
 import TripDetailModal from "@/components/TripDetailModal";
 import NovaViagemForm from "@/components/forms/NovaViagemForm";
 import { useToast } from "@/components/Toast";
@@ -40,6 +41,9 @@ export default function ViagensPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'board'>(() =>
+    typeof window !== 'undefined' && window.innerWidth < 768 ? 'list' : 'board'
+  );
 
   const loadTrips = useCallback(() => {
     setLoading(true);
@@ -94,12 +98,25 @@ export default function ViagensPage() {
     };
   });
 
+  const listActionConfig: Record<string, { actionLabel: string; nextColumnId: string }> = {
+    open: { actionLabel: "Aprovar", nextColumnId: "under_review" },
+    under_review: { actionLabel: "Buscar Motorista", nextColumnId: "searching_drivers" },
+    searching_drivers: { actionLabel: "Agendar", nextColumnId: "scheduled" },
+    scheduled: { actionLabel: "Iniciar", nextColumnId: "started" },
+    started: { actionLabel: "Finalizar", nextColumnId: "finished" },
+  };
+
+  const listColumns: KanbanListColumn[] = columns.map((col) => ({
+    ...col,
+    ...(listActionConfig[col.id] ?? {}),
+  }));
+
   return (
     <div>
       {/* Page header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-heading font-black text-dark">Viagens</h1>
+          <h1 className="text-xl md:text-3xl font-heading font-black text-dark">Viagens</h1>
           <p className="text-contrast text-sm mt-1">
             Gerencie todas as viagens da plataforma
           </p>
@@ -112,15 +129,51 @@ export default function ViagensPage() {
         </button>
       </div>
 
+      {/* View toggle */}
+      <div className="flex items-center gap-2 mb-4">
+        <button
+          onClick={() => setViewMode('list')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            viewMode === 'list' ? 'bg-primary text-background' : 'bg-surface border border-border text-dark'
+          }`}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
+            <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
+          </svg>
+          Lista
+        </button>
+        <button
+          onClick={() => setViewMode('board')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            viewMode === 'board' ? 'bg-primary text-background' : 'bg-surface border border-border text-dark'
+          }`}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
+            <rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
+          </svg>
+          Board
+        </button>
+      </div>
+
       {/* Kanban */}
       {loading ? (
         <div className="text-center py-16 text-contrast text-sm">Carregando viagens...</div>
-      ) : (
-        <KanbanBoard
-          columns={columns}
-          onCardMove={handleCardMove}
-          onCardClick={handleCardClick}
+      ) : viewMode === 'list' ? (
+        <KanbanListView
+          columns={listColumns}
+          onMoveCard={(cardId, fromCol, toCol) => handleCardMove(cardId, fromCol, toCol)}
+          onCardClick={(card) => handleCardClick(card.id)}
         />
+      ) : (
+        <div className="overflow-x-auto">
+          <KanbanBoard
+            columns={columns}
+            onCardMove={handleCardMove}
+            onCardClick={(cardId) => handleCardClick(cardId)}
+          />
+        </div>
       )}
 
       <NovaViagemForm
