@@ -146,12 +146,12 @@ export default function DashboardPage() {
     <div>
       {/* Page header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-heading font-black text-dark">Dashboard</h1>
+        <h1 className="text-xl md:text-3xl font-heading font-black text-dark">Dashboard</h1>
         <p className="text-contrast text-sm mt-1">Visão geral da plataforma</p>
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-5 mb-8">
         {stats.map((stat) => (
           <div
             key={stat.label}
@@ -171,9 +171,9 @@ export default function DashboardPage() {
       </div>
 
       {/* Tables */}
-      <div className="grid xl:grid-cols-2 gap-6">
+      <div className="flex flex-col md:grid md:grid-cols-2 gap-4 md:gap-6">
         {/* Recent trips */}
-        <div className="bg-surface rounded-xl border border-border">
+        <div className="bg-surface rounded-xl border border-border overflow-x-auto">
           <div className="px-5 py-4 border-b border-border flex items-center justify-between">
             <h2 className="font-heading font-bold text-dark">Viagens Recentes</h2>
             <Link href="/viagens" className="text-xs text-accent hover:text-accent-dark transition-colors">
@@ -215,7 +215,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Recent services */}
-        <div className="bg-surface rounded-xl border border-border">
+        <div className="bg-surface rounded-xl border border-border overflow-x-auto">
           <div className="px-5 py-4 border-b border-border flex items-center justify-between">
             <h2 className="font-heading font-bold text-dark">Serviços Recentes</h2>
             <Link href="/outros-servicos" className="text-xs text-accent hover:text-accent-dark transition-colors">
