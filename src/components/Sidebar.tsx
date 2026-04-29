@@ -117,7 +117,7 @@ export default function Sidebar() {
     .toUpperCase();
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-64 bg-surface flex flex-col z-50 border-r border-border">
+    <aside className="fixed left-0 top-0 h-screen w-64 bg-surface hidden md:flex flex-col z-50 border-r border-border">
       {/* Logo */}
       <div className="px-6 py-6 border-b border-border">
         <Link href="/dashboard" className="flex items-center gap-3">
