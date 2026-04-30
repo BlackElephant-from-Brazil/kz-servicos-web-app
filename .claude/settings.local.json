@@ -5,7 +5,13 @@
       "Bash(npx tsc *)",
       "Bash(supabase --version)",
       "Bash(git -C .github/skills/kz-database status --short)",
-      "Bash(git -C .github/skills/kz-database status)"
+      "Bash(git -C .github/skills/kz-database status)",
+      "Bash(bash *)",
+      "Bash(ls -d .worktrees)",
+      "Bash(ls -d worktrees)",
+      "Bash(git worktree *)",
+      "Bash(git merge *)",
+      "Bash(git branch *)"
     ]
   }
 }
