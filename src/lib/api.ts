@@ -305,41 +305,227 @@ export async function fetchProviderProfiles(): Promise<ProviderProfile[]> {
 
 // ─── Dashboard Stats ───────────────────────────────────────
 export async function fetchDashboardStats() {
+  const now = new Date();
+  const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+  const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999).toISOString();
+  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString();
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
   const [
-    { count: totalTrips },
-    { count: totalServices },
-    { count: totalDrivers },
-    { count: totalProviders },
-    recentTrips,
-    recentServices,
+    tripsResult,
+    servicesResult,
+    paidTripsResult,
+    paidServicesResult,
+    ratingsResult,
+    driversAvailableResult,
+    pendingProvidersResult,
+    recentTripsResult,
+    recentServicesResult,
   ] = await Promise.all([
-    supabase.from("trips").select("*", { count: "exact", head: true }),
-    supabase.from("service_requests").select("*", { count: "exact", head: true }),
-    supabase.from("driver_profiles").select("*", { count: "exact", head: true }),
-    supabase.from("provider_profiles").select("*", { count: "exact", head: true }),
+    supabase
+      .from("trips")
+      .select("id, status, final_price, estimated_price, is_paid, created_at"),
+    supabase
+      .from("service_requests")
+      .select("id, status, final_price, estimated_price, is_paid, created_at, updated_at"),
+    supabase
+      .from("trips")
+      .select("final_price, payment_date, updated_at, payment_method")
+      .eq("is_paid", true)
+      .gte("updated_at", sixMonthsAgo),
+    supabase
+      .from("service_requests")
+      .select("final_price, updated_at, payment_method")
+      .eq("is_paid", true)
+      .gte("updated_at", sixMonthsAgo),
+    supabase.from("ratings").select("rating"),
+    supabase
+      .from("driver_profiles")
+      .select("*", { count: "exact", head: true })
+      .eq("is_available", true),
+    supabase
+      .from("provider_profiles")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "pending"),
     supabase
       .from("trips")
       .select(
-        "id, status, scheduled_datetime, users!client_id(full_name), pickup_address:addresses!pickup_address_id(formatted_address), dropoff_address:addresses!dropoff_address_id(formatted_address)"
+        "id, status, scheduled_datetime, final_price, estimated_price, is_paid, payment_method, users!client_id(full_name), pickup_address:addresses!pickup_address_id(formatted_address), dropoff_address:addresses!dropoff_address_id(formatted_address)"
       )
       .order("created_at", { ascending: false })
       .limit(5),
     supabase
       .from("service_requests")
       .select(
-        "id, status, service_date, description, users!client_id(full_name), service_categories(name)"
+        "id, status, service_date, description, final_price, estimated_price, is_paid, payment_method, users!client_id(full_name), service_categories(name)"
       )
       .order("created_at", { ascending: false })
       .limit(5),
   ]);
 
+  const trips = tripsResult.data ?? [];
+  const services = servicesResult.data ?? [];
+  const paidTrips = paidTripsResult.data ?? [];
+  const paidServices = paidServicesResult.data ?? [];
+  const ratings = ratingsResult.data ?? [];
+
+  // ── Revenue ────────────────────────────────────────────
+  // Use payment_date when available, fall back to updated_at
+  const tripEffectiveDate = (t: { payment_date?: string | null; updated_at: string }) =>
+    t.payment_date ?? t.updated_at;
+
+  const revenueThisMonth =
+    paidTrips
+      .filter((t) => tripEffectiveDate(t) >= startOfThisMonth)
+      .reduce((s, t) => s + (t.final_price ?? 0), 0) +
+    paidServices
+      .filter((s) => s.updated_at >= startOfThisMonth)
+      .reduce((s, t) => s + (t.final_price ?? 0), 0);
+
+  const revenueLastMonth =
+    paidTrips
+      .filter((t) => {
+        const d = tripEffectiveDate(t);
+        return d >= startOfLastMonth && d <= endOfLastMonth;
+      })
+      .reduce((s, t) => s + (t.final_price ?? 0), 0) +
+    paidServices
+      .filter((s) => s.updated_at >= startOfLastMonth && s.updated_at <= endOfLastMonth)
+      .reduce((s, t) => s + (t.final_price ?? 0), 0);
+
+  const revenueChange =
+    revenueLastMonth > 0
+      ? ((revenueThisMonth - revenueLastMonth) / revenueLastMonth) * 100
+      : null;
+
+  const pendingRevenue =
+    trips
+      .filter((t) => t.status === "finished" && !t.is_paid)
+      .reduce((s, t) => s + (t.final_price ?? t.estimated_price ?? 0), 0) +
+    services
+      .filter((s) => s.status === "finished" && !s.is_paid)
+      .reduce((s, t) => s + (t.final_price ?? t.estimated_price ?? 0), 0);
+
+  const allPaid = [...paidTrips, ...paidServices].filter(
+    (i) => (i.final_price ?? 0) > 0
+  );
+  const avgTicket =
+    allPaid.length > 0
+      ? allPaid.reduce((s, i) => s + (i.final_price ?? 0), 0) / allPaid.length
+      : 0;
+
+  // ── Operations ─────────────────────────────────────────
+  const activeTripsStatuses = new Set([
+    "started", "scheduled", "searching_drivers",
+    "awaiting_client_confirmation", "awaiting_driver_confirmation",
+  ]);
+  const activeServiceStatuses = new Set(["in_progress", "assigned", "searching_provider"]);
+  const activeOps =
+    trips.filter((t) => activeTripsStatuses.has(t.status)).length +
+    services.filter((s) => activeServiceStatuses.has(s.status)).length;
+
+  const recentAll = [
+    ...trips.filter((t) => t.created_at >= thirtyDaysAgo),
+    ...services.filter((s) => s.created_at >= thirtyDaysAgo),
+  ];
+  const completionRate =
+    recentAll.length > 0
+      ? Math.round(
+          (recentAll.filter((i) => i.status === "finished").length / recentAll.length) * 100
+        )
+      : 0;
+
+  const avgRating =
+    ratings.length > 0
+      ? Number(
+          (ratings.reduce((s, r) => s + Number(r.rating), 0) / ratings.length).toFixed(1)
+        )
+      : 0;
+
+  // ── Monthly chart (6 months) ───────────────────────────
+  const MONTH_LABELS = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  const monthlyRevenue = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+    return {
+      month: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+      label: MONTH_LABELS[d.getMonth()],
+      trips: 0,
+      services: 0,
+    };
+  });
+
+  paidTrips.forEach((t) => {
+    if (!t.final_price) return;
+    const d = new Date(t.payment_date ?? t.updated_at);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const slot = monthlyRevenue.find((m) => m.month === key);
+    if (slot) slot.trips += t.final_price;
+  });
+
+  paidServices.forEach((s) => {
+    if (!s.final_price) return;
+    const d = new Date(s.updated_at);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const slot = monthlyRevenue.find((m) => m.month === key);
+    if (slot) slot.services += s.final_price;
+  });
+
+  // ── Payment method distribution ────────────────────────
+  const paymentMap: Record<string, number> = {};
+  [...paidTrips, ...paidServices].forEach((item) => {
+    const m = item.payment_method ?? "outro";
+    paymentMap[m] = (paymentMap[m] ?? 0) + 1;
+  });
+
+  // ── Status distributions ───────────────────────────────
+  const tripStatusMap: Record<string, number> = {};
+  trips.forEach((t) => {
+    tripStatusMap[t.status] = (tripStatusMap[t.status] ?? 0) + 1;
+  });
+
+  const serviceStatusMap: Record<string, number> = {};
+  services.forEach((s) => {
+    serviceStatusMap[s.status] = (serviceStatusMap[s.status] ?? 0) + 1;
+  });
+
+  // ── Alerts ─────────────────────────────────────────────
+  const alertAwaitingClient = trips.filter(
+    (t) => t.status === "awaiting_client_confirmation"
+  ).length;
+  const alertAwaitingDriver = trips.filter(
+    (t) => t.status === "awaiting_driver_confirmation"
+  ).length;
+  const alertUnderReview =
+    trips.filter((t) => t.status === "under_review").length +
+    services.filter((s) => s.status === "under_review").length;
+  const alertUnpaidFinished =
+    trips.filter((t) => t.status === "finished" && !t.is_paid).length +
+    services.filter((s) => s.status === "finished" && !s.is_paid).length;
+
   return {
-    totalTrips: totalTrips ?? 0,
-    totalServices: totalServices ?? 0,
-    totalDrivers: totalDrivers ?? 0,
-    totalProviders: totalProviders ?? 0,
-    recentTrips: recentTrips.data ?? [],
-    recentServices: recentServices.data ?? [],
+    revenueThisMonth,
+    revenueLastMonth,
+    revenueChange,
+    pendingRevenue,
+    avgTicket,
+    activeOps,
+    completionRate,
+    avgRating,
+    driversAvailable: driversAvailableResult.count ?? 0,
+    pendingProviders: pendingProvidersResult.count ?? 0,
+    totalTrips: trips.length,
+    totalServices: services.length,
+    monthlyRevenue,
+    paymentMap,
+    tripStatusMap,
+    serviceStatusMap,
+    alertAwaitingClient,
+    alertAwaitingDriver,
+    alertUnderReview,
+    alertUnpaidFinished,
+    recentTrips: recentTripsResult.data ?? [],
+    recentServices: recentServicesResult.data ?? [],
   };
 }
 
