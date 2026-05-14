@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 const INVITE_WEBHOOK_URL =
-  "https://black-elephant.app.n8n.cloud/webhook-test/kz-new-customer-invite";
+  "https://black-elephant.app.n8n.cloud/webhook/kz-new-customer-invite";
 
 function generateTemporaryPassword(): string {
   const chars =
