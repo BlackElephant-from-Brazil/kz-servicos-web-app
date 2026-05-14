@@ -19,7 +19,9 @@ import {
   addTripDriverCandidate,
   removeTripDriverCandidate,
   updateTripDriverCandidateStatus,
+  updateTripFinancial,
 } from "@/lib/api";
+import type { PaymentMethod } from "@/types/database";
 import { useToast } from "@/components/Toast";
 import SearchableSelect from "@/components/SearchableSelect";
 
@@ -139,6 +141,11 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
   const [selectedDriverId, setSelectedDriverId] = useState("");
   const [addingDriver, setAddingDriver] = useState(false);
 
+  // Financial edit state
+  const [finalPriceInput, setFinalPriceInput] = useState("");
+  const [paymentMethodInput, setPaymentMethodInput] = useState<PaymentMethod | "">("");
+  const [financialSaving, setFinancialSaving] = useState(false);
+
   const handleClose = useCallback(() => {
     if (closingRef.current) return;
     closingRef.current = true;
@@ -176,6 +183,8 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
       ]);
       setLiveTrip(freshTrip);
       setHistory(hist);
+      setFinalPriceInput(freshTrip.final_price?.toString() ?? "");
+      setPaymentMethodInput(freshTrip.payment_method ?? "");
 
       // Tabela pode não existir ainda se a migration não foi aplicada
       try {
@@ -207,6 +216,8 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
     setShowDeleteConfirm(false);
     setDeleteInput("");
     setSelectedDriverId("");
+    setFinalPriceInput(trip.final_price?.toString() ?? "");
+    setPaymentMethodInput(trip.payment_method ?? "");
     loadTripData(trip.id);
   }, [open, trip, loadTripData]);
 
@@ -320,6 +331,58 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
       toast("success", `Candidato marcado como ${candidateStatusLabels[status]}`);
     } catch {
       toast("danger", "Erro ao atualizar status do candidato");
+    }
+  }
+
+  async function handleToggleIsPaid() {
+    if (!t) return;
+    const next = !t.is_paid;
+    setLiveTrip((prev) => prev ? { ...prev, is_paid: next } : prev);
+    try {
+      await updateTripFinancial(t.id, {
+        is_paid: next,
+        payment_date: next ? new Date().toISOString() : null,
+      });
+      onUpdate();
+    } catch {
+      setLiveTrip((prev) => prev ? { ...prev, is_paid: !next } : prev);
+      toast("danger", "Erro ao atualizar pagamento da corrida");
+    }
+  }
+
+  async function handleToggleIsDriverPaied() {
+    if (!t) return;
+    const next = !t.is_driver_paied;
+    setLiveTrip((prev) => prev ? { ...prev, is_driver_paied: next } : prev);
+    try {
+      await updateTripFinancial(t.id, { is_driver_paied: next });
+      onUpdate();
+    } catch {
+      setLiveTrip((prev) => prev ? { ...prev, is_driver_paied: !next } : prev);
+      toast("danger", "Erro ao atualizar pagamento do motorista");
+    }
+  }
+
+  async function handleSaveFinancial() {
+    if (!t) return;
+    setFinancialSaving(true);
+    try {
+      const parsedPrice = finalPriceInput !== "" ? parseFloat(finalPriceInput) : null;
+      await updateTripFinancial(t.id, {
+        final_price: parsedPrice,
+        payment_method: paymentMethodInput || null,
+      });
+      setLiveTrip((prev) =>
+        prev
+          ? { ...prev, final_price: parsedPrice, payment_method: paymentMethodInput || null }
+          : prev
+      );
+      toast("success", "Dados financeiros salvos");
+      onUpdate();
+    } catch {
+      toast("danger", "Erro ao salvar dados financeiros");
+    } finally {
+      setFinancialSaving(false);
     }
   }
 
@@ -614,24 +677,79 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                 </div>
               )}
 
-              {/* Payment */}
-              <SectionTitle>Pagamento</SectionTitle>
-              <InfoRow
-                label="Método"
-                value={t.payment_method ? paymentLabels[t.payment_method] ?? t.payment_method : "—"}
-              />
+              {/* Financial Area */}
+              <SectionTitle>Área Financeira</SectionTitle>
+
+              {/* Status toggles */}
+              <div className="flex flex-col gap-2 mb-3">
+                <button
+                  onClick={handleToggleIsPaid}
+                  className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+                    t.is_paid
+                      ? "bg-accent/10 border-accent/30 text-accent"
+                      : "bg-background border-border text-contrast hover:border-primary hover:text-primary"
+                  }`}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  {t.is_paid ? "Corrida paga" : "Marcar corrida como paga"}
+                </button>
+
+                <button
+                  onClick={handleToggleIsDriverPaied}
+                  className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+                    t.is_driver_paied
+                      ? "bg-accent/10 border-accent/30 text-accent"
+                      : "bg-background border-border text-contrast hover:border-primary hover:text-primary"
+                  }`}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  {t.is_driver_paied ? "Motorista pago" : "Marcar motorista como pago"}
+                </button>
+              </div>
+
+              {/* Financial values */}
               <InfoRow label="Valor estimado" value={formatCurrency(t.estimated_price)} />
-              <InfoRow label="Valor final" value={formatCurrency(t.final_price)} />
-              <InfoRow
-                label="Pago"
-                value={
-                  t.is_paid ? (
-                    <span className="text-accent font-medium">Sim</span>
-                  ) : (
-                    <span className="text-danger font-medium">Não</span>
-                  )
-                }
-              />
+
+              <div className="py-2 border-b border-border">
+                <label className="text-xs text-contrast block mb-1">Valor final</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={finalPriceInput}
+                  onChange={(e) => setFinalPriceInput(e.target.value)}
+                  placeholder="R$ 0,00"
+                  className="w-full rounded-md bg-background border border-border text-dark text-xs font-body px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary placeholder:text-contrast/40"
+                />
+              </div>
+
+              <div className="py-2 border-b border-border">
+                <label className="text-xs text-contrast block mb-1">Forma de pagamento</label>
+                <select
+                  value={paymentMethodInput}
+                  onChange={(e) => setPaymentMethodInput(e.target.value as PaymentMethod | "")}
+                  className="w-full rounded-md bg-background border border-border text-dark text-xs font-body px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                >
+                  <option value="">— Selecione —</option>
+                  <option value="pix">PIX</option>
+                  <option value="debit">Débito</option>
+                  <option value="credit">Crédito</option>
+                  <option value="cash">Dinheiro</option>
+                  <option value="billing">Faturamento</option>
+                </select>
+              </div>
+
+              <button
+                onClick={handleSaveFinancial}
+                disabled={financialSaving}
+                className="mt-2 w-full py-1.5 rounded-lg bg-primary text-background text-xs font-heading font-bold hover:bg-primary-dark transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {financialSaving ? "Salvando..." : "Salvar valores"}
+              </button>
 
               {/* Danger Zone */}
               {t.status !== "cancelled" && (

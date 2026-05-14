@@ -143,6 +143,7 @@ export interface Trip {
   estimated_price: number | null;
   final_price: number | null;
   is_paid: boolean;
+  is_driver_paied: boolean;
   payment_method: PaymentMethod | null;
   payment_date: string | null;
   started_at: string | null;
@@ -172,6 +173,7 @@ export interface ServiceRequest {
   estimated_price: number | null;
   final_price: number | null;
   is_paid: boolean;
+  is_provider_paied: boolean;
   payment_method: PaymentMethod | null;
   observations: string | null;
   provider_observations: string | null;
@@ -198,6 +200,9 @@ export interface Debito {
   valor_final: number | null;
   pago: boolean;
   metodo_pagamento: PaymentMethod | null;
+  motorista_pago?: boolean;
+  prestador_pago?: boolean;
+  payment_date?: string | null;
 }
 
 export type TripDriverCandidateStatus = "pending" | "accepted" | "rejected";

@@ -188,6 +188,7 @@ export default function OutrosServicosPage() {
         request={selectedRequest}
         open={!!selectedRequest}
         onClose={() => setSelectedRequest(null)}
+        onUpdate={loadRequests}
       />
     </div>
   );

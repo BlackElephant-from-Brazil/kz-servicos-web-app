@@ -6,8 +6,7 @@ import SearchableSelect from "@/components/SearchableSelect";
 import NovoClienteForm from "@/components/forms/NovoClienteForm";
 import { useToast } from "@/components/Toast";
 import {
-  createTrip,
-  createAddress,
+  adminCreateTrip,
   fetchUsers,
   fetchServiceCategories,
 } from "@/lib/api";
@@ -131,16 +130,11 @@ export default function NovaViagemForm({
 
     setSubmitting(true);
     try {
-      const [pickup, dropoff] = await Promise.all([
-        createAddress({ formatted_address: pickupAddress }),
-        createAddress({ formatted_address: dropoffAddress }),
-      ]);
-
-      await createTrip({
+      await adminCreateTrip({
         client_id: clientId,
         service_category_id: tripCategoryId,
-        pickup_address_id: pickup.id,
-        dropoff_address_id: dropoff.id,
+        pickup_address: pickupAddress,
+        dropoff_address: dropoffAddress,
         scheduled_datetime: new Date(scheduledDatetime).toISOString(),
         is_round_trip: isRoundTrip,
         return_datetime: isRoundTrip

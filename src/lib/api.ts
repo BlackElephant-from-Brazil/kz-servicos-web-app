@@ -14,6 +14,7 @@ import type {
   Address,
   ServiceCategory,
   Debito,
+  PaymentMethod,
 } from "@/types/database";
 
 // ─── Auth ──────────────────────────────────────────────────
@@ -95,6 +96,35 @@ export async function fetchServiceRequests(): Promise<ServiceRequest[]> {
     .order("service_date", { ascending: false });
   if (error) throw error;
   return data as ServiceRequest[];
+}
+
+// ─── Update Trip Financial ─────────────────────────────────
+export async function updateTripFinancial(
+  id: string,
+  payload: {
+    is_paid?: boolean;
+    is_driver_paied?: boolean;
+    final_price?: number | null;
+    payment_method?: PaymentMethod | null;
+    payment_date?: string | null;
+  }
+): Promise<void> {
+  const { error } = await supabase.from("trips").update(payload).eq("id", id);
+  if (error) throw error;
+}
+
+// ─── Update Service Request Financial ─────────────────────
+export async function updateServiceRequestFinancial(
+  id: string,
+  payload: {
+    is_paid?: boolean;
+    is_provider_paied?: boolean;
+    final_price?: number | null;
+    payment_method?: PaymentMethod | null;
+  }
+): Promise<void> {
+  const { error } = await supabase.from("service_requests").update(payload).eq("id", id);
+  if (error) throw error;
 }
 
 // ─── Update Trip Status ────────────────────────────────────
@@ -249,6 +279,8 @@ export async function fetchDebitos(): Promise<Debito[]> {
       valor_final: t.final_price,
       pago: t.is_paid,
       metodo_pagamento: t.payment_method,
+      motorista_pago: t.is_driver_paied,
+      payment_date: t.payment_date,
     }));
 
   const serviceDebitos: Debito[] = serviceRequests
@@ -267,6 +299,7 @@ export async function fetchDebitos(): Promise<Debito[]> {
       valor_final: r.final_price,
       pago: r.is_paid,
       metodo_pagamento: r.payment_method,
+      prestador_pago: r.is_provider_paied,
     }));
 
   return [...tripDebitos, ...serviceDebitos].sort(
@@ -558,6 +591,31 @@ export async function createAddress(address: {
     .single();
   if (error) throw error;
   return data as Address;
+}
+
+// ─── Admin Create Trip (via server route, bypasses RLS) ───
+export async function adminCreateTrip(trip: {
+  client_id: string;
+  service_category_id: string;
+  pickup_address: string;
+  dropoff_address: string;
+  scheduled_datetime: string;
+  is_round_trip: boolean;
+  return_datetime?: string | null;
+  passenger_count: number;
+  children_count?: number;
+  luggage_count?: number;
+  observations?: string | null;
+  payment_method?: string | null;
+}) {
+  const res = await fetch("/api/trips", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(trip),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Erro ao criar viagem");
+  return data as Trip;
 }
 
 // ─── Create Trip ───────────────────────────────────────────
