@@ -31,5 +31,8 @@ BEGIN
 END;
 $$;
 
+GRANT EXECUTE ON FUNCTION select_trip_driver(UUID, UUID, UUID, DECIMAL) TO authenticated;
+
 -- +goose Down
+REVOKE EXECUTE ON FUNCTION select_trip_driver(UUID, UUID, UUID, DECIMAL) FROM authenticated;
 DROP FUNCTION IF EXISTS select_trip_driver(UUID, UUID, UUID, DECIMAL);
