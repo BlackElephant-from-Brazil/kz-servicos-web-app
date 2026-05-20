@@ -362,14 +362,14 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
     if (candidate.offered_price == null) return;
     try {
       await selectTripDriver(
-        trip!.id,
+        t.id,
         candidate.id,
         candidate.driver_profile_id,
         candidate.offered_price
       );
       const [updatedCandidates, updatedTrip] = await Promise.all([
-        fetchTripDriverCandidates(trip!.id),
-        fetchTripById(trip!.id),
+        fetchTripDriverCandidates(t.id),
+        fetchTripById(t.id),
       ]);
       setCandidates(updatedCandidates);
       setLiveTrip(updatedTrip);
@@ -587,59 +587,62 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                             </button>
                           )}
                         </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          {candStatus !== "accepted" && (
+                        {/* Only show manual accept/reject for non-searching_drivers statuses */}
+                        {t.status !== "searching_drivers" && (
+                          <div className="flex items-center gap-1 shrink-0">
+                            {candStatus !== "accepted" && (
+                              <button
+                                onClick={() => handleUpdateCandidateStatus(c.driver_profile_id, "accepted")}
+                                className="text-contrast hover:text-accent transition-colors cursor-pointer"
+                                aria-label="Marcar como aceito"
+                                title="Marcar como aceito"
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                              </button>
+                            )}
+                            {candStatus !== "rejected" && (
+                              <button
+                                onClick={() => handleUpdateCandidateStatus(c.driver_profile_id, "rejected")}
+                                className="text-contrast hover:text-danger transition-colors cursor-pointer"
+                                aria-label="Marcar como rejeitado"
+                                title="Marcar como rejeitado"
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <line x1="18" y1="6" x2="6" y2="18" />
+                                  <line x1="6" y1="6" x2="18" y2="18" />
+                                </svg>
+                              </button>
+                            )}
+                            {candStatus !== "pending" && (
+                              <button
+                                onClick={() => handleUpdateCandidateStatus(c.driver_profile_id, "pending")}
+                                className="text-contrast hover:text-primary transition-colors cursor-pointer"
+                                aria-label="Voltar para pendente"
+                                title="Voltar para pendente"
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M3 12a9 9 0 1 0 9-9" />
+                                  <polyline points="3 4 3 10 9 10" />
+                                </svg>
+                              </button>
+                            )}
                             <button
-                              onClick={() => handleUpdateCandidateStatus(c.driver_profile_id, "accepted")}
-                              className="text-contrast hover:text-accent transition-colors cursor-pointer"
-                              aria-label="Marcar como aceito"
-                              title="Marcar como aceito"
+                              onClick={() => handleRemoveCandidate(c.driver_profile_id)}
+                              className="ml-1 pl-1 border-l border-border text-contrast hover:text-danger transition-colors cursor-pointer"
+                              aria-label="Remover candidato"
+                              title="Remover candidato"
                             >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="20 6 9 17 4 12" />
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="3 6 5 6 21 6" />
+                                <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6" />
+                                <path d="M10 11v6" />
+                                <path d="M14 11v6" />
                               </svg>
                             </button>
-                          )}
-                          {candStatus !== "rejected" && (
-                            <button
-                              onClick={() => handleUpdateCandidateStatus(c.driver_profile_id, "rejected")}
-                              className="text-contrast hover:text-danger transition-colors cursor-pointer"
-                              aria-label="Marcar como rejeitado"
-                              title="Marcar como rejeitado"
-                            >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <line x1="18" y1="6" x2="6" y2="18" />
-                                <line x1="6" y1="6" x2="18" y2="18" />
-                              </svg>
-                            </button>
-                          )}
-                          {candStatus !== "pending" && (
-                            <button
-                              onClick={() => handleUpdateCandidateStatus(c.driver_profile_id, "pending")}
-                              className="text-contrast hover:text-primary transition-colors cursor-pointer"
-                              aria-label="Voltar para pendente"
-                              title="Voltar para pendente"
-                            >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M3 12a9 9 0 1 0 9-9" />
-                                <polyline points="3 4 3 10 9 10" />
-                              </svg>
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleRemoveCandidate(c.driver_profile_id)}
-                            className="ml-1 pl-1 border-l border-border text-contrast hover:text-danger transition-colors cursor-pointer"
-                            aria-label="Remover candidato"
-                            title="Remover candidato"
-                          >
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="3 6 5 6 21 6" />
-                              <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6" />
-                              <path d="M10 11v6" />
-                              <path d="M14 11v6" />
-                            </svg>
-                          </button>
-                        </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
