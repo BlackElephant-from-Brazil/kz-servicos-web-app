@@ -20,8 +20,8 @@ import {
   removeTripDriverCandidate,
   updateTripDriverCandidateStatus,
   updateTripFinancial,
+  selectTripDriver,
 } from "@/lib/api";
-import type { PaymentMethod } from "@/types/database";
 import { useToast } from "@/components/Toast";
 import SearchableSelect from "@/components/SearchableSelect";
 
@@ -141,10 +141,6 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
   const [selectedDriverId, setSelectedDriverId] = useState("");
   const [addingDriver, setAddingDriver] = useState(false);
 
-  // Financial edit state
-  const [finalPriceInput, setFinalPriceInput] = useState("");
-  const [paymentMethodInput, setPaymentMethodInput] = useState<PaymentMethod | "">("");
-  const [financialSaving, setFinancialSaving] = useState(false);
 
   const handleClose = useCallback(() => {
     if (closingRef.current) return;
@@ -183,8 +179,6 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
       ]);
       setLiveTrip(freshTrip);
       setHistory(hist);
-      setFinalPriceInput(freshTrip.final_price?.toString() ?? "");
-      setPaymentMethodInput(freshTrip.payment_method ?? "");
 
       // Tabela pode não existir ainda se a migration não foi aplicada
       try {
@@ -216,8 +210,6 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
     setShowDeleteConfirm(false);
     setDeleteInput("");
     setSelectedDriverId("");
-    setFinalPriceInput(trip.final_price?.toString() ?? "");
-    setPaymentMethodInput(trip.payment_method ?? "");
     loadTripData(trip.id);
   }, [open, trip, loadTripData]);
 
@@ -363,28 +355,29 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
     }
   }
 
-  async function handleSaveFinancial() {
-    if (!t) return;
-    setFinancialSaving(true);
+  const paymentMethodLabel = (m: string) =>
+    ({ pix: "PIX", debit: "Débito", credit: "Crédito", cash: "Dinheiro", billing: "Faturamento" }[m] ?? m);
+
+  const handleSelectDriver = async (candidate: TripDriverCandidate) => {
+    if (candidate.offered_price == null) return;
     try {
-      const parsedPrice = finalPriceInput !== "" ? parseFloat(finalPriceInput) : null;
-      await updateTripFinancial(t.id, {
-        final_price: parsedPrice,
-        payment_method: paymentMethodInput || null,
-      });
-      setLiveTrip((prev) =>
-        prev
-          ? { ...prev, final_price: parsedPrice, payment_method: paymentMethodInput || null }
-          : prev
+      await selectTripDriver(
+        trip!.id,
+        candidate.id,
+        candidate.driver_profile_id,
+        candidate.offered_price
       );
-      toast("success", "Dados financeiros salvos");
-      onUpdate();
+      const [updatedCandidates, updatedTrip] = await Promise.all([
+        fetchTripDriverCandidates(trip!.id),
+        fetchTripById(trip!.id),
+      ]);
+      setCandidates(updatedCandidates);
+      setLiveTrip(updatedTrip);
+      toast("success", `Motorista selecionado — R$ ${candidate.offered_price.toFixed(2)}`);
     } catch {
-      toast("danger", "Erro ao salvar dados financeiros");
-    } finally {
-      setFinancialSaving(false);
+      toast("danger", "Erro ao selecionar motorista");
     }
-  }
+  };
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
@@ -569,12 +562,30 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                       >
                         <div className="min-w-0 flex-1">
                           <p className="text-xs text-dark font-body truncate">{driverName}</p>
-                          <span
-                            className="inline-block mt-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-medium"
-                            style={{ backgroundColor: candColor.bg, color: candColor.text }}
-                          >
-                            {candidateStatusLabels[candStatus]}
-                          </span>
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            <span
+                              className="inline-block text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                              style={{ backgroundColor: candColor.bg, color: candColor.text }}
+                            >
+                              {candidateStatusLabels[candStatus]}
+                            </span>
+                            {c.offered_price != null ? (
+                              <span className="text-[10px] font-medium text-green-500">
+                                R$ {c.offered_price.toFixed(2)}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-contrast/50 italic">Aguardando valor</span>
+                            )}
+                          </div>
+                          {t.status === "searching_drivers" && candStatus === "pending" && (
+                            <button
+                              onClick={() => handleSelectDriver(c)}
+                              disabled={c.offered_price == null}
+                              className="mt-1.5 px-2 py-0.5 rounded text-[10px] font-heading font-bold bg-accent text-background hover:bg-accent-dark transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              Selecionar
+                            </button>
+                          )}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           {candStatus !== "accepted" && (
@@ -711,45 +722,36 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                 </button>
               </div>
 
-              {/* Financial values */}
-              <InfoRow label="Valor estimado" value={formatCurrency(t.estimated_price)} />
-
-              <div className="py-2 border-b border-border">
-                <label className="text-xs text-contrast block mb-1">Valor final</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={finalPriceInput}
-                  onChange={(e) => setFinalPriceInput(e.target.value)}
-                  placeholder="R$ 0,00"
-                  className="w-full rounded-md bg-background border border-border text-dark text-xs font-body px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary placeholder:text-contrast/40"
-                />
+              {/* Financial values — read-only */}
+              <div className="flex flex-col gap-1.5">
+                {t.estimated_price != null && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background border border-border">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-contrast">
+                      <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                    </svg>
+                    <span className="text-xs text-contrast">Preço estimado:</span>
+                    <span className="text-xs text-dark font-medium ml-auto">{formatCurrency(t.estimated_price)}</span>
+                  </div>
+                )}
+                {t.final_price != null && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background border border-border">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-contrast">
+                      <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                    </svg>
+                    <span className="text-xs text-contrast">Valor final:</span>
+                    <span className="text-xs text-dark font-medium ml-auto">{formatCurrency(t.final_price)}</span>
+                  </div>
+                )}
+                {t.payment_method != null && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background border border-border">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-contrast">
+                      <rect x="1" y="4" width="22" height="16" rx="2" ry="2" /><line x1="1" y1="10" x2="23" y2="10" />
+                    </svg>
+                    <span className="text-xs text-contrast">Pagamento:</span>
+                    <span className="text-xs text-dark font-medium ml-auto">{paymentMethodLabel(t.payment_method)}</span>
+                  </div>
+                )}
               </div>
-
-              <div className="py-2 border-b border-border">
-                <label className="text-xs text-contrast block mb-1">Forma de pagamento</label>
-                <select
-                  value={paymentMethodInput}
-                  onChange={(e) => setPaymentMethodInput(e.target.value as PaymentMethod | "")}
-                  className="w-full rounded-md bg-background border border-border text-dark text-xs font-body px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
-                >
-                  <option value="">— Selecione —</option>
-                  <option value="pix">PIX</option>
-                  <option value="debit">Débito</option>
-                  <option value="credit">Crédito</option>
-                  <option value="cash">Dinheiro</option>
-                  <option value="billing">Faturamento</option>
-                </select>
-              </div>
-
-              <button
-                onClick={handleSaveFinancial}
-                disabled={financialSaving}
-                className="mt-2 w-full py-1.5 rounded-lg bg-primary text-background text-xs font-heading font-bold hover:bg-primary-dark transition-colors cursor-pointer disabled:opacity-50"
-              >
-                {financialSaving ? "Salvando..." : "Salvar valores"}
-              </button>
 
               {/* Danger Zone */}
               {t.status !== "cancelled" && (
