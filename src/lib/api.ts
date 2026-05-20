@@ -243,6 +243,36 @@ export async function updateTripDriverCandidateStatus(
   return data as TripDriverCandidate;
 }
 
+export async function selectTripDriver(
+  tripId: string,
+  candidateId: string,
+  driverProfileId: string,
+  offeredPrice: number
+): Promise<void> {
+  const { error: tripError } = await supabase
+    .from("trips")
+    .update({
+      driver_profile_id: driverProfileId,
+      final_price: offeredPrice,
+      status: "scheduled",
+    })
+    .eq("id", tripId);
+  if (tripError) throw new Error(tripError.message);
+
+  const { error: acceptError } = await supabase
+    .from("trip_driver_candidates")
+    .update({ status: "accepted", responded_at: new Date().toISOString() })
+    .eq("id", candidateId);
+  if (acceptError) throw new Error(acceptError.message);
+
+  const { error: rejectError } = await supabase
+    .from("trip_driver_candidates")
+    .update({ status: "rejected", responded_at: new Date().toISOString() })
+    .eq("trip_id", tripId)
+    .neq("id", candidateId);
+  if (rejectError) throw new Error(rejectError.message);
+}
+
 // ─── Update Service Request Status ─────────────────────────
 export async function updateServiceRequestStatus(
   id: string,

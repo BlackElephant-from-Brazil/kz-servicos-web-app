@@ -147,6 +147,7 @@ export interface Trip {
   payment_method: PaymentMethod | null;
   payment_date: string | null;
   started_at: string | null;
+  driver_arrived_at: string | null;
   finished_at: string | null;
   cancelled_at: string | null;
   cancellation_reason: string | null;
@@ -212,6 +213,7 @@ export interface TripDriverCandidate {
   trip_id: string;
   driver_profile_id: string;
   status: TripDriverCandidateStatus;
+  offered_price: number | null;
   invited_at: string;
   responded_at: string | null;
   observations: string | null;
