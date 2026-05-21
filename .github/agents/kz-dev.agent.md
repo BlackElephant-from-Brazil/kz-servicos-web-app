@@ -46,6 +46,17 @@ Before ANY creative work (features, components, behavior changes):
 - Utilities in `src/lib/`
 - All responses and UI text in **Portuguese (pt-BR)** unless specified otherwise
 
+## Database Knowledge
+
+**Always use the `kz-database` skill** when:
+- Writing queries, API calls, or Supabase client code
+- Creating or modifying types that map to database tables
+- Working with RLS policies, triggers, or realtime subscriptions
+- Debugging data-related errors (missing columns, permission denied, etc.)
+- Building new pages/components that fetch or mutate data
+
+**Keep the skill updated**: When creating or modifying migration files in `supabase/migrations/`, update the corresponding reference files in `.github/skills/kz-database/references/` to reflect the changes (schema.md, rls-policies.md, triggers.md, api-endpoints.md as applicable).
+
 ## Constraints
 
 - DO NOT skip brainstorming for "simple" tasks
