@@ -214,6 +214,7 @@ export interface TripDriverCandidate {
   driver_profile_id: string;
   status: TripDriverCandidateStatus;
   offered_price: number | null;
+  admin_approved: boolean;
   invited_at: string;
   responded_at: string | null;
   observations: string | null;

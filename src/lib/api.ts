@@ -258,6 +258,22 @@ export async function selectTripDriver(
   if (error) throw new Error(error.message);
 }
 
+export async function approveDriverCandidate(
+  tripId: string,
+  driverProfileId: string,
+  approved: boolean
+): Promise<TripDriverCandidate> {
+  const { data, error } = await supabase
+    .from("trip_driver_candidates")
+    .update({ admin_approved: approved })
+    .eq("trip_id", tripId)
+    .eq("driver_profile_id", driverProfileId)
+    .select("*, driver_profiles(*, provider_profiles(*, users(*)))")
+    .single();
+  if (error) throw error;
+  return data as TripDriverCandidate;
+}
+
 // ─── Update Service Request Status ─────────────────────────
 export async function updateServiceRequestStatus(
   id: string,
