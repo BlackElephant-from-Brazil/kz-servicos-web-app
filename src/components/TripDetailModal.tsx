@@ -21,6 +21,7 @@ import {
   updateTripDriverCandidateStatus,
   updateTripFinancial,
   selectTripDriver,
+  approveDriverCandidate,
 } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import SearchableSelect from "@/components/SearchableSelect";
@@ -379,6 +380,21 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
     }
   };
 
+  const handleApproveCandidate = async (
+    driverProfileId: string,
+    approved: boolean
+  ) => {
+    try {
+      const updated = await approveDriverCandidate(t.id, driverProfileId, approved);
+      setCandidates((prev) =>
+        prev.map((c) => (c.driver_profile_id === driverProfileId ? updated : c))
+      );
+      toast("success", approved ? "Candidato aprovado para o cliente" : "Aprovação removida");
+    } catch {
+      toast("danger", "Erro ao atualizar aprovação");
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
       {/* Backdrop */}
@@ -577,13 +593,16 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                               <span className="text-[10px] text-contrast/50 italic">Aguardando valor</span>
                             )}
                           </div>
-                          {t.status === "searching_drivers" && candStatus === "pending" && (
+                          {t.status === "searching_drivers" && candStatus === "accepted" && (
                             <button
-                              onClick={() => handleSelectDriver(c)}
-                              disabled={c.offered_price == null}
-                              className="mt-1.5 px-2 py-0.5 rounded text-[10px] font-heading font-bold bg-accent text-background hover:bg-accent-dark transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                              onClick={() => handleApproveCandidate(c.driver_profile_id, !c.admin_approved)}
+                              className={`mt-1.5 px-2 py-0.5 rounded text-[10px] font-heading font-bold transition-colors cursor-pointer ${
+                                c.admin_approved
+                                  ? "bg-green-500/20 text-green-600 hover:bg-red-500/20 hover:text-red-600"
+                                  : "bg-surface-hover text-contrast hover:bg-accent/20 hover:text-accent"
+                              }`}
                             >
-                              Selecionar
+                              {c.admin_approved ? "Aprovado ✓" : "Aprovar para cliente"}
                             </button>
                           )}
                         </div>
