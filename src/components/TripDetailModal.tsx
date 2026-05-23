@@ -25,6 +25,7 @@ import {
 } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import SearchableSelect from "@/components/SearchableSelect";
+import { supabase } from "@/lib/supabase";
 
 interface TripDetailModalProps {
   trip: Trip | null;
@@ -213,6 +214,29 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
     setSelectedDriverId("");
     loadTripData(trip.id);
   }, [open, trip, loadTripData]);
+
+  // Realtime subscription: atualiza candidatos quando motorista aceita/coloca preço
+  useEffect(() => {
+    if (!open || !trip) return;
+    const channel = supabase
+      .channel(`candidates-${trip.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "trip_driver_candidates",
+          filter: `trip_id=eq.${trip.id}`,
+        },
+        () => {
+          fetchTripDriverCandidates(trip.id).then(setCandidates).catch(() => {});
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [open, trip]);
 
   // When status changes to searching_drivers, load drivers
   useEffect(() => {
@@ -574,7 +598,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
               ) : candidates.length === 0 ? (
                 <p className="text-xs text-contrast italic">Nenhum candidato indicado.</p>
               ) : (
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col gap-2">
                   {candidates.map((c) => {
                     const driverName =
                       c.driver_profiles?.provider_profiles?.users?.full_name ?? "Motorista";
@@ -583,29 +607,29 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                     return (
                       <div
                         key={c.id}
-                        className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-background border border-border"
+                        className="flex items-center justify-between gap-3 px-4 py-3.5 rounded-lg bg-background border border-border"
                       >
                         <div className="min-w-0 flex-1">
-                          <p className="text-xs text-dark font-body truncate">{driverName}</p>
-                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          <p className="text-sm font-semibold text-dark font-body truncate">{driverName}</p>
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
                             <span
-                              className="inline-block text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                              className="inline-block text-xs px-2 py-0.5 rounded-full font-medium"
                               style={{ backgroundColor: candColor.bg, color: candColor.text }}
                             >
                               {candidateStatusLabels[candStatus]}
                             </span>
                             {c.offered_price != null ? (
-                              <span className="text-[10px] font-medium text-green-500">
+                              <span className="text-sm font-bold text-green-500">
                                 R$ {c.offered_price.toFixed(2)}
                               </span>
                             ) : (
-                              <span className="text-[10px] text-contrast/50 italic">Aguardando valor</span>
+                              <span className="text-xs text-contrast/50 italic">Aguardando valor</span>
                             )}
                           </div>
                           {t.status === "searching_drivers" && candStatus === "accepted" && (
                             <button
                               onClick={() => handleApproveCandidate(c.driver_profile_id, !c.admin_approved)}
-                              className={`mt-1.5 px-2 py-0.5 rounded text-[10px] font-heading font-bold transition-colors cursor-pointer ${
+                              className={`mt-2 px-3 py-1.5 rounded text-xs font-heading font-bold transition-colors cursor-pointer ${
                                 c.admin_approved
                                   ? "bg-green-500/20 text-green-600 hover:bg-red-500/20 hover:text-red-600"
                                   : "bg-surface-hover text-contrast hover:bg-accent/20 hover:text-accent"
@@ -617,15 +641,15 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                         </div>
                         {/* Only show manual accept/reject for non-searching_drivers statuses */}
                         {t.status !== "searching_drivers" && (
-                          <div className="flex items-center gap-1 shrink-0">
+                          <div className="flex items-center gap-1.5 shrink-0">
                             {candStatus !== "accepted" && (
                               <button
                                 onClick={() => handleUpdateCandidateStatus(c.driver_profile_id, "accepted")}
-                                className="text-contrast hover:text-accent transition-colors cursor-pointer"
+                                className="w-8 h-8 rounded-lg flex items-center justify-center text-contrast hover:text-accent hover:bg-accent/10 transition-colors cursor-pointer"
                                 aria-label="Marcar como aceito"
                                 title="Marcar como aceito"
                               >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                   <polyline points="20 6 9 17 4 12" />
                                 </svg>
                               </button>
@@ -633,11 +657,11 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                             {candStatus !== "rejected" && (
                               <button
                                 onClick={() => handleUpdateCandidateStatus(c.driver_profile_id, "rejected")}
-                                className="text-contrast hover:text-danger transition-colors cursor-pointer"
+                                className="w-8 h-8 rounded-lg flex items-center justify-center text-contrast hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer"
                                 aria-label="Marcar como rejeitado"
                                 title="Marcar como rejeitado"
                               >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                   <line x1="18" y1="6" x2="6" y2="18" />
                                   <line x1="6" y1="6" x2="18" y2="18" />
                                 </svg>
@@ -646,11 +670,11 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                             {candStatus !== "pending" && (
                               <button
                                 onClick={() => handleUpdateCandidateStatus(c.driver_profile_id, "pending")}
-                                className="text-contrast hover:text-primary transition-colors cursor-pointer"
+                                className="w-8 h-8 rounded-lg flex items-center justify-center text-contrast hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
                                 aria-label="Voltar para pendente"
                                 title="Voltar para pendente"
                               >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                   <path d="M3 12a9 9 0 1 0 9-9" />
                                   <polyline points="3 4 3 10 9 10" />
                                 </svg>
@@ -658,11 +682,11 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                             )}
                             <button
                               onClick={() => handleRemoveCandidate(c.driver_profile_id)}
-                              className="ml-1 pl-1 border-l border-border text-contrast hover:text-danger transition-colors cursor-pointer"
+                              className="w-8 h-8 rounded-lg flex items-center justify-center text-contrast hover:text-danger hover:bg-danger/10 border-l border-border ml-1 pl-2 transition-colors cursor-pointer"
                               aria-label="Remover candidato"
                               title="Remover candidato"
                             >
-                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <polyline points="3 6 5 6 21 6" />
                                 <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6" />
                                 <path d="M10 11v6" />
