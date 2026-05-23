@@ -15,7 +15,28 @@ import type {
   ServiceCategory,
   Debito,
   PaymentMethod,
+  AdminLog,
 } from "@/types/database";
+
+// ─── Admin Logs ────────────────────────────────────────────
+function logAdminAction(
+  action: string,
+  entityId: string,
+  details: Record<string, unknown>
+): void {
+  supabase.from("admin_logs").insert({ action, entity_id: entityId, details }).then();
+}
+
+export async function fetchAdminLogs(): Promise<AdminLog[]> {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("admin_logs")
+    .select("*, admin:users!admin_id(full_name, email)")
+    .gte("created_at", since)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as AdminLog[];
+}
 
 // ─── Auth ──────────────────────────────────────────────────
 export async function signIn(email: string, password: string) {
@@ -111,6 +132,7 @@ export async function updateTripFinancial(
 ): Promise<void> {
   const { error } = await supabase.from("trips").update(payload).eq("id", id);
   if (error) throw error;
+  logAdminAction("Financeiro atualizado", id, payload as Record<string, unknown>);
 }
 
 // ─── Update Service Request Financial ─────────────────────
@@ -134,6 +156,7 @@ export async function updateTripStatus(id: string, status: TripStatus): Promise<
     .update({ status })
     .eq("id", id);
   if (error) throw error;
+  logAdminAction("Status atualizado", id, { status });
 }
 
 // ─── Fetch Single Trip ─────────────────────────────────────
@@ -167,6 +190,7 @@ export async function approveTrip(id: string): Promise<void> {
     .update({ status: "searching_drivers" })
     .eq("id", id);
   if (error) throw error;
+  logAdminAction("Viagem aprovada", id, {});
 }
 
 // ─── Reject Trip (under_review → open) ────────────────────
@@ -177,6 +201,7 @@ export async function rejectTrip(id: string, reason: string): Promise<void> {
     p_reason: trimmed.length > 0 ? trimmed : null,
   });
   if (error) throw error;
+  logAdminAction("Viagem recusada", id, { reason: trimmed || null });
 }
 
 // ─── Cancel Trip (any → cancelled) ────────────────────────
@@ -186,6 +211,7 @@ export async function cancelTrip(id: string): Promise<void> {
     .update({ status: "cancelled", cancelled_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw error;
+  logAdminAction("Viagem cancelada", id, {});
 }
 
 // ─── Trip Driver Candidates ────────────────────────────────
@@ -209,6 +235,7 @@ export async function addTripDriverCandidate(
     .select("*, driver_profiles(*, provider_profiles(*, users(*)))")
     .single();
   if (error) throw error;
+  logAdminAction("Motorista adicionado como candidato", tripId, { driver_profile_id: driverProfileId });
   return data as TripDriverCandidate;
 }
 
@@ -222,6 +249,7 @@ export async function removeTripDriverCandidate(
     .eq("trip_id", tripId)
     .eq("driver_profile_id", driverProfileId);
   if (error) throw error;
+  logAdminAction("Candidato removido", tripId, { driver_profile_id: driverProfileId });
 }
 
 export async function updateTripDriverCandidateStatus(
@@ -240,6 +268,7 @@ export async function updateTripDriverCandidateStatus(
     .select("*, driver_profiles(*, provider_profiles(*, users(*)))")
     .single();
   if (error) throw error;
+  logAdminAction("Status do candidato atualizado", tripId, { driver_profile_id: driverProfileId, status });
   return data as TripDriverCandidate;
 }
 
@@ -256,6 +285,7 @@ export async function selectTripDriver(
     p_offered_price: offeredPrice,
   });
   if (error) throw new Error(error.message);
+  logAdminAction("Motorista selecionado", tripId, { driver_profile_id: driverProfileId, offered_price: offeredPrice });
 }
 
 export async function approveDriverCandidate(
@@ -271,6 +301,7 @@ export async function approveDriverCandidate(
     .select("*, driver_profiles(*, provider_profiles(*, users(*)))")
     .single();
   if (error) throw error;
+  logAdminAction(approved ? "Candidato aprovado para cliente" : "Aprovação do candidato removida", tripId, { driver_profile_id: driverProfileId });
   return data as TripDriverCandidate;
 }
 

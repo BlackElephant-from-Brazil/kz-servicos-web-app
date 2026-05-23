@@ -250,6 +250,21 @@ export interface Database {
       addresses: { Row: Address };
       trips: { Row: Trip };
       service_requests: { Row: ServiceRequest };
+      admin_logs: { Row: AdminLog };
     };
+  };
+}
+
+export interface AdminLog {
+  id: string;
+  admin_id: string;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  details: Record<string, unknown> | null;
+  created_at: string;
+  admin?: {
+    full_name: string;
+    email: string;
   };
 }
