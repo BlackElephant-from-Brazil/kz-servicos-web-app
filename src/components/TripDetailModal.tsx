@@ -412,25 +412,34 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
         role="dialog"
         aria-modal="true"
         aria-label={route}
-        className="relative bg-surface border border-border rounded-xl flex flex-col"
-        style={{
-          width: "70vw",
-          minWidth: "600px",
-          maxHeight: "90vh",
-          animation: "modal-in 300ms ease-out forwards",
-        }}
+        className="relative bg-surface border-0 md:border border-border rounded-none md:rounded-xl flex flex-col w-full h-full md:w-[70vw] md:min-w-[600px] md:h-auto md:max-h-[90vh] overflow-hidden"
+        style={{ animation: "modal-in 300ms ease-out forwards" }}
       >
         {/* Header */}
-        <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b border-border shrink-0">
-          <div className="min-w-0 flex-1 mr-4">
+        <div className="flex items-center gap-3 px-4 md:px-6 pt-4 md:pt-5 pb-4 border-b border-border shrink-0">
+          {/* Botão voltar — mobile apenas */}
+          <button
+            onClick={handleClose}
+            className="md:hidden w-8 h-8 rounded-lg flex items-center justify-center text-contrast hover:text-dark hover:bg-surface-hover transition-all duration-150 cursor-pointer shrink-0"
+            aria-label="Voltar"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+          </button>
+
+          <div className="min-w-0 flex-1">
             <h2 className="text-lg font-heading font-black text-dark leading-tight truncate">
               {route}
             </h2>
             <p className="text-sm text-contrast font-body mt-0.5">{passengerName}</p>
           </div>
+
+          {/* Botão fechar — desktop apenas */}
           <button
             onClick={handleClose}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-contrast hover:text-dark hover:bg-surface-hover transition-all duration-150 cursor-pointer shrink-0"
+            className="hidden md:flex w-8 h-8 rounded-lg items-center justify-center text-contrast hover:text-dark hover:bg-surface-hover transition-all duration-150 cursor-pointer shrink-0"
             aria-label="Fechar"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -446,9 +455,9 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
             Carregando...
           </div>
         ) : (
-          <div className="flex flex-1 overflow-hidden">
+          <div className="flex flex-col md:flex-row flex-1 overflow-y-auto md:overflow-hidden">
             {/* ── LEFT COLUMN (65%) ── */}
-            <div className="overflow-y-auto px-6 py-5 border-r border-border" style={{ width: "65%" }}>
+            <div className="px-4 md:px-6 py-5 md:border-r border-border md:overflow-y-auto md:w-[65%]">
               {/* Main Info */}
               <SectionTitle>Informações da Viagem</SectionTitle>
 
@@ -538,7 +547,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
             </div>
 
             {/* ── RIGHT COLUMN (35%) ── */}
-            <div className="overflow-y-auto px-5 py-5 flex flex-col gap-0" style={{ width: "35%" }}>
+            <div className="border-t md:border-t-0 border-border px-4 md:px-5 py-5 flex flex-col gap-0 md:overflow-y-auto md:w-[35%]">
               {/* Driver Candidates */}
               <SectionTitle>Motoristas Candidatos</SectionTitle>
 
