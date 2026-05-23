@@ -7,6 +7,12 @@ import TripDetailModal from "@/components/TripDetailModal";
 import NovaViagemForm from "@/components/forms/NovaViagemForm";
 import { useToast } from "@/components/Toast";
 import { fetchTrips, updateTripStatus } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
+import {
+  labelForTripStatus,
+  requestNotificationPermission,
+  showNotification,
+} from "@/lib/notifications";
 import type { Trip, TripStatus } from "@/types/database";
 
 const tripColumnConfig: { id: TripStatus; title: string; color: string }[] = [
@@ -55,6 +61,53 @@ export default function ViagensPage() {
 
   useEffect(() => {
     loadTrips();
+  }, [loadTrips]);
+
+  useEffect(() => {
+    requestNotificationPermission();
+  }, []);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("trips-board")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "trips" },
+        (payload) => {
+          const next = payload.new as Trip;
+          showNotification(
+            "Nova viagem solicitada",
+            `Status: ${labelForTripStatus(next.status)}`
+          );
+          loadTrips();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "trips" },
+        (payload) => {
+          const next = payload.new as Trip;
+          const prev = payload.old as Partial<Trip>;
+          // payload.old só carrega colunas alteradas (REPLICA IDENTITY DEFAULT).
+          // Notificar apenas quando status estiver presente em old (mudou de fato).
+          if (prev.status !== undefined && prev.status !== next.status) {
+            showNotification(
+              "Viagem atualizada",
+              `Status: ${labelForTripStatus(prev.status)} → ${labelForTripStatus(next.status)}`
+            );
+          }
+          loadTrips();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "trips" },
+        () => loadTrips()
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [loadTrips]);
 
   const handleCardMove = useCallback(
@@ -123,7 +176,7 @@ export default function ViagensPage() {
         </div>
         <button
           onClick={() => setShowForm(true)}
-          className="bg-primary text-background px-5 py-2.5 rounded-lg font-heading font-bold text-sm hover:bg-primary-dark transition-colors duration-200 cursor-pointer"
+          className="bg-primary text-background px-3 py-2 md:px-5 md:py-2.5 rounded-lg font-heading font-bold text-xs md:text-sm whitespace-nowrap hover:bg-primary-dark transition-colors duration-200 cursor-pointer"
         >
           + Nova Viagem
         </button>
