@@ -211,6 +211,15 @@ export async function cancelTrip(id: string): Promise<void> {
     .update({ status: "cancelled", cancelled_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw error;
+  await supabase
+    .from("trip_driver_candidates")
+    .update({
+      status: "rejected",
+      responded_at: new Date().toISOString(),
+      observations: "Corrida cancelada pela KZ",
+    })
+    .eq("trip_id", id)
+    .in("status", ["pending", "accepted"]);
   logAdminAction("Viagem cancelada", id, {});
 }
 
@@ -303,6 +312,70 @@ export async function approveDriverCandidate(
   if (error) throw error;
   logAdminAction(approved ? "Candidato aprovado para cliente" : "Aprovação do candidato removida", tripId, { driver_profile_id: driverProfileId });
   return data as TripDriverCandidate;
+}
+
+export async function resendDriverConfirmationNotification(tripId: string): Promise<void> {
+  type Relation<T> = T | T[] | null | undefined;
+  type ResendTripRow = {
+    status: TripStatus;
+    pickup_address?: Relation<{ formatted_address: string | null }>;
+    dropoff_address?: Relation<{ formatted_address: string | null }>;
+    driver_profiles?: Relation<{
+      provider_profiles?: Relation<{ user_id: string | null }>;
+    }>;
+  };
+  const firstRelation = <T>(value: Relation<T>): T | undefined =>
+    Array.isArray(value) ? value[0] : value ?? undefined;
+
+  const { data, error } = await supabase
+    .from("trips")
+    .select(
+      "id, status, driver_profile_id, scheduled_datetime, pickup_address:addresses!pickup_address_id(formatted_address), dropoff_address:addresses!dropoff_address_id(formatted_address), driver_profiles(provider_profiles(user_id, users(full_name)))"
+    )
+    .eq("id", tripId)
+    .single();
+
+  if (error) throw error;
+
+  const tripData = data as unknown as ResendTripRow;
+
+  if (tripData.status !== "awaiting_driver_confirmation") {
+    throw new Error("A viagem não está aguardando validação do motorista.");
+  }
+
+  const driverProfile = firstRelation(tripData.driver_profiles);
+  const providerProfile = firstRelation(driverProfile?.provider_profiles);
+  const driverUserId = providerProfile?.user_id;
+  if (!driverUserId) {
+    throw new Error("Não foi possível localizar o usuário do motorista.");
+  }
+
+  const route =
+    `${firstRelation(tripData.pickup_address)?.formatted_address?.split(",")[0] ?? "origem"} → ` +
+    `${firstRelation(tripData.dropoff_address)?.formatted_address?.split(",")[0] ?? "destino"}`;
+
+  const { error: notificationError } = await supabase
+    .from("notifications")
+    .insert({
+      user_id: driverUserId,
+      title: "Confirme o agendamento",
+      body: `O passageiro aceitou sua proposta para ${route}. Confirme ou recuse o agendamento.`,
+      type: "trip_driver_confirmation",
+      reference_type: "trip",
+      reference_id: tripId,
+      link: `/schedules/${tripId}`,
+    });
+  if (notificationError) throw notificationError;
+
+  const { error: touchError } = await supabase
+    .from("trips")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", tripId);
+  if (touchError) throw touchError;
+
+  logAdminAction("Reenvio de validação do motorista", tripId, {
+    driver_user_id: driverUserId,
+  });
 }
 
 // ─── Update Service Request Status ─────────────────────────

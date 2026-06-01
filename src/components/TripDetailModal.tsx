@@ -22,6 +22,7 @@ import {
   updateTripFinancial,
   selectTripDriver,
   approveDriverCandidate,
+  resendDriverConfirmationNotification,
 } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import SearchableSelect from "@/components/SearchableSelect";
@@ -40,7 +41,7 @@ const statusLabels: Record<string, string> = {
   review_rejected: "Rejeitada na Análise",
   searching_drivers: "Buscando Motorista",
   awaiting_client_confirmation: "Aguardando Confirmação do Cliente",
-  awaiting_driver_confirmation: "Aguardando Confirmação do Motorista",
+  awaiting_driver_confirmation: "Aguardando Validação do Motorista",
   scheduled: "Agendada",
   started: "Em Andamento",
   finished: "Finalizada",
@@ -53,7 +54,7 @@ const statusColors: Record<string, { bg: string; text: string }> = {
   review_rejected: { bg: "#ef444420", text: "#ef4444" },
   searching_drivers: { bg: "#2261FE20", text: "#2261FE" },
   awaiting_client_confirmation: { bg: "#2261FE20", text: "#2261FE" },
-  awaiting_driver_confirmation: { bg: "#2261FE20", text: "#2261FE" },
+  awaiting_driver_confirmation: { bg: "#f9731620", text: "#f97316" },
   scheduled: { bg: "#2261FE20", text: "#2261FE" },
   started: { bg: "#22c55e20", text: "#22c55e" },
   finished: { bg: "#22c55e20", text: "#22c55e" },
@@ -142,6 +143,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
   // Driver selector state
   const [selectedDriverId, setSelectedDriverId] = useState("");
   const [addingDriver, setAddingDriver] = useState(false);
+  const [resendingDriverConfirmation, setResendingDriverConfirmation] = useState(false);
 
 
   const handleClose = useCallback(() => {
@@ -398,7 +400,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
       ]);
       setCandidates(updatedCandidates);
       setLiveTrip(updatedTrip);
-      toast("success", `Motorista selecionado — R$ ${candidate.offered_price.toFixed(2)}`);
+      toast("success", `Aguardando validação do motorista — R$ ${candidate.offered_price.toFixed(2)}`);
     } catch {
       toast("danger", "Erro ao selecionar motorista");
     }
@@ -416,6 +418,26 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
       toast("success", approved ? "Candidato aprovado para o cliente" : "Aprovação removida");
     } catch {
       toast("danger", "Erro ao atualizar aprovação");
+    }
+  };
+
+  const handleResendDriverConfirmation = async () => {
+    if (!t) return;
+    setResendingDriverConfirmation(true);
+    try {
+      await resendDriverConfirmationNotification(t.id);
+      toast("success", "Pedido de validação reenviado ao motorista");
+      await loadTripData(t.id);
+      onUpdate();
+    } catch (e) {
+      toast(
+        "danger",
+        e instanceof Error
+          ? e.message
+          : "Erro ao reenviar validação ao motorista"
+      );
+    } finally {
+      setResendingDriverConfirmation(false);
     }
   };
 
@@ -516,6 +538,27 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                   <p className="text-xs text-contrast mb-1 font-medium">Observações</p>
                   <p className="text-xs text-dark">{t.observations}</p>
                 </div>
+              )}
+
+              {t.status === "awaiting_driver_confirmation" && (
+                <>
+                  <SectionTitle>Validação do Motorista</SectionTitle>
+                  <div className="p-3 rounded-lg bg-orange-50 border border-orange-200">
+                    <p className="text-xs text-dark font-body leading-relaxed">
+                      O cliente aceitou o motorista. A viagem só será agendada
+                      depois que o motorista confirmar novamente.
+                    </p>
+                    <button
+                      onClick={handleResendDriverConfirmation}
+                      disabled={resendingDriverConfirmation}
+                      className="mt-3 w-full py-2 rounded-lg bg-primary text-background text-sm font-heading font-bold hover:bg-primary-dark transition-colors duration-150 cursor-pointer disabled:opacity-50"
+                    >
+                      {resendingDriverConfirmation
+                        ? "Reenviando..."
+                        : "Reenviar pedido ao motorista"}
+                    </button>
+                  </div>
+                </>
               )}
 
               {/* Status-based actions */}

@@ -19,6 +19,8 @@ const tripColumnConfig: { id: TripStatus; title: string; color: string }[] = [
   { id: "open", title: "Aberta", color: "#FEBF22" },
   { id: "under_review", title: "Em Análise", color: "#5C5956" },
   { id: "searching_drivers", title: "Buscando Motorista", color: "#2261FE" },
+  { id: "awaiting_client_confirmation", title: "Aguardando Cliente", color: "#f97316" },
+  { id: "awaiting_driver_confirmation", title: "Aguardando Validação Motorista", color: "#f97316" },
   { id: "scheduled", title: "Agendada", color: "#2261FE" },
   { id: "started", title: "Em Andamento", color: "#22c55e" },
   { id: "finished", title: "Finalizada", color: "#22c55e" },
@@ -154,7 +156,9 @@ export default function ViagensPage() {
   const listActionConfig: Record<string, { actionLabel: string; nextColumnId: string }> = {
     open: { actionLabel: "Aprovar", nextColumnId: "under_review" },
     under_review: { actionLabel: "Buscar Motorista", nextColumnId: "searching_drivers" },
-    searching_drivers: { actionLabel: "Agendar", nextColumnId: "scheduled" },
+    searching_drivers: { actionLabel: "Aguardar cliente", nextColumnId: "awaiting_client_confirmation" },
+    awaiting_client_confirmation: { actionLabel: "Validar motorista", nextColumnId: "awaiting_driver_confirmation" },
+    awaiting_driver_confirmation: { actionLabel: "Agendar", nextColumnId: "scheduled" },
     scheduled: { actionLabel: "Iniciar", nextColumnId: "started" },
     started: { actionLabel: "Finalizar", nextColumnId: "finished" },
   };
