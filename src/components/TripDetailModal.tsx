@@ -21,9 +21,12 @@ import {
   updateTripDriverCandidateStatus,
   updateTripFinancial,
   selectTripDriver,
+  approveDriverCandidate,
+  resendDriverConfirmationNotification,
 } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import SearchableSelect from "@/components/SearchableSelect";
+import { supabase } from "@/lib/supabase";
 
 interface TripDetailModalProps {
   trip: Trip | null;
@@ -38,7 +41,7 @@ const statusLabels: Record<string, string> = {
   review_rejected: "Rejeitada na Análise",
   searching_drivers: "Buscando Motorista",
   awaiting_client_confirmation: "Aguardando Confirmação do Cliente",
-  awaiting_driver_confirmation: "Aguardando Confirmação do Motorista",
+  awaiting_driver_confirmation: "Aguardando Validação do Motorista",
   scheduled: "Agendada",
   started: "Em Andamento",
   finished: "Finalizada",
@@ -51,7 +54,7 @@ const statusColors: Record<string, { bg: string; text: string }> = {
   review_rejected: { bg: "#ef444420", text: "#ef4444" },
   searching_drivers: { bg: "#2261FE20", text: "#2261FE" },
   awaiting_client_confirmation: { bg: "#2261FE20", text: "#2261FE" },
-  awaiting_driver_confirmation: { bg: "#2261FE20", text: "#2261FE" },
+  awaiting_driver_confirmation: { bg: "#f9731620", text: "#f97316" },
   scheduled: { bg: "#2261FE20", text: "#2261FE" },
   started: { bg: "#22c55e20", text: "#22c55e" },
   finished: { bg: "#22c55e20", text: "#22c55e" },
@@ -140,6 +143,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
   // Driver selector state
   const [selectedDriverId, setSelectedDriverId] = useState("");
   const [addingDriver, setAddingDriver] = useState(false);
+  const [resendingDriverConfirmation, setResendingDriverConfirmation] = useState(false);
 
 
   const handleClose = useCallback(() => {
@@ -212,6 +216,29 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
     setSelectedDriverId("");
     loadTripData(trip.id);
   }, [open, trip, loadTripData]);
+
+  // Realtime subscription: atualiza candidatos quando motorista aceita/coloca preço
+  useEffect(() => {
+    if (!open || !trip) return;
+    const channel = supabase
+      .channel(`candidates-${trip.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "trip_driver_candidates",
+          filter: `trip_id=eq.${trip.id}`,
+        },
+        () => {
+          fetchTripDriverCandidates(trip.id).then(setCandidates).catch(() => {});
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [open, trip]);
 
   // When status changes to searching_drivers, load drivers
   useEffect(() => {
@@ -373,9 +400,44 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
       ]);
       setCandidates(updatedCandidates);
       setLiveTrip(updatedTrip);
-      toast("success", `Motorista selecionado — R$ ${candidate.offered_price.toFixed(2)}`);
+      toast("success", `Aguardando validação do motorista — R$ ${candidate.offered_price.toFixed(2)}`);
     } catch {
       toast("danger", "Erro ao selecionar motorista");
+    }
+  };
+
+  const handleApproveCandidate = async (
+    driverProfileId: string,
+    approved: boolean
+  ) => {
+    try {
+      const updated = await approveDriverCandidate(t.id, driverProfileId, approved);
+      setCandidates((prev) =>
+        prev.map((c) => (c.driver_profile_id === driverProfileId ? updated : c))
+      );
+      toast("success", approved ? "Candidato aprovado para o cliente" : "Aprovação removida");
+    } catch {
+      toast("danger", "Erro ao atualizar aprovação");
+    }
+  };
+
+  const handleResendDriverConfirmation = async () => {
+    if (!t) return;
+    setResendingDriverConfirmation(true);
+    try {
+      await resendDriverConfirmationNotification(t.id);
+      toast("success", "Pedido de validação reenviado ao motorista");
+      await loadTripData(t.id);
+      onUpdate();
+    } catch (e) {
+      toast(
+        "danger",
+        e instanceof Error
+          ? e.message
+          : "Erro ao reenviar validação ao motorista"
+      );
+    } finally {
+      setResendingDriverConfirmation(false);
     }
   };
 
@@ -396,25 +458,34 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
         role="dialog"
         aria-modal="true"
         aria-label={route}
-        className="relative bg-surface border border-border rounded-xl flex flex-col"
-        style={{
-          width: "70vw",
-          minWidth: "600px",
-          maxHeight: "90vh",
-          animation: "modal-in 300ms ease-out forwards",
-        }}
+        className="relative bg-surface border-0 md:border border-border rounded-none md:rounded-xl flex flex-col w-full h-full md:w-[70vw] md:min-w-[600px] md:h-auto md:max-h-[90vh] overflow-hidden"
+        style={{ animation: "modal-in 300ms ease-out forwards" }}
       >
         {/* Header */}
-        <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b border-border shrink-0">
-          <div className="min-w-0 flex-1 mr-4">
+        <div className="flex items-center gap-3 px-4 md:px-6 pt-4 md:pt-5 pb-4 border-b border-border shrink-0">
+          {/* Botão voltar — mobile apenas */}
+          <button
+            onClick={handleClose}
+            className="md:hidden w-8 h-8 rounded-lg flex items-center justify-center text-contrast hover:text-dark hover:bg-surface-hover transition-all duration-150 cursor-pointer shrink-0"
+            aria-label="Voltar"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+          </button>
+
+          <div className="min-w-0 flex-1">
             <h2 className="text-lg font-heading font-black text-dark leading-tight truncate">
               {route}
             </h2>
             <p className="text-sm text-contrast font-body mt-0.5">{passengerName}</p>
           </div>
+
+          {/* Botão fechar — desktop apenas */}
           <button
             onClick={handleClose}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-contrast hover:text-dark hover:bg-surface-hover transition-all duration-150 cursor-pointer shrink-0"
+            className="hidden md:flex w-8 h-8 rounded-lg items-center justify-center text-contrast hover:text-dark hover:bg-surface-hover transition-all duration-150 cursor-pointer shrink-0"
             aria-label="Fechar"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -430,9 +501,9 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
             Carregando...
           </div>
         ) : (
-          <div className="flex flex-1 overflow-hidden">
+          <div className="flex flex-col md:flex-row flex-1 overflow-y-auto md:overflow-hidden">
             {/* ── LEFT COLUMN (65%) ── */}
-            <div className="overflow-y-auto px-6 py-5 border-r border-border" style={{ width: "65%" }}>
+            <div className="px-4 md:px-6 py-5 md:border-r border-border md:overflow-y-auto md:w-[65%]">
               {/* Main Info */}
               <SectionTitle>Informações da Viagem</SectionTitle>
 
@@ -467,6 +538,27 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                   <p className="text-xs text-contrast mb-1 font-medium">Observações</p>
                   <p className="text-xs text-dark">{t.observations}</p>
                 </div>
+              )}
+
+              {t.status === "awaiting_driver_confirmation" && (
+                <>
+                  <SectionTitle>Validação do Motorista</SectionTitle>
+                  <div className="p-3 rounded-lg bg-orange-50 border border-orange-200">
+                    <p className="text-xs text-dark font-body leading-relaxed">
+                      O cliente aceitou o motorista. A viagem só será agendada
+                      depois que o motorista confirmar novamente.
+                    </p>
+                    <button
+                      onClick={handleResendDriverConfirmation}
+                      disabled={resendingDriverConfirmation}
+                      className="mt-3 w-full py-2 rounded-lg bg-primary text-background text-sm font-heading font-bold hover:bg-primary-dark transition-colors duration-150 cursor-pointer disabled:opacity-50"
+                    >
+                      {resendingDriverConfirmation
+                        ? "Reenviando..."
+                        : "Reenviar pedido ao motorista"}
+                    </button>
+                  </div>
+                </>
               )}
 
               {/* Status-based actions */}
@@ -522,7 +614,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
             </div>
 
             {/* ── RIGHT COLUMN (35%) ── */}
-            <div className="overflow-y-auto px-5 py-5 flex flex-col gap-0" style={{ width: "35%" }}>
+            <div className="border-t md:border-t-0 border-border px-4 md:px-5 py-5 flex flex-col gap-0 md:overflow-y-auto md:w-[35%]">
               {/* Driver Candidates */}
               <SectionTitle>Motoristas Candidatos</SectionTitle>
 
@@ -549,7 +641,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
               ) : candidates.length === 0 ? (
                 <p className="text-xs text-contrast italic">Nenhum candidato indicado.</p>
               ) : (
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col gap-2">
                   {candidates.map((c) => {
                     const driverName =
                       c.driver_profiles?.provider_profiles?.users?.full_name ?? "Motorista";
@@ -558,46 +650,49 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                     return (
                       <div
                         key={c.id}
-                        className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-background border border-border"
+                        className="flex items-center justify-between gap-3 px-4 py-3.5 rounded-lg bg-background border border-border"
                       >
                         <div className="min-w-0 flex-1">
-                          <p className="text-xs text-dark font-body truncate">{driverName}</p>
-                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          <p className="text-sm font-semibold text-dark font-body truncate">{driverName}</p>
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
                             <span
-                              className="inline-block text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                              className="inline-block text-xs px-2 py-0.5 rounded-full font-medium"
                               style={{ backgroundColor: candColor.bg, color: candColor.text }}
                             >
                               {candidateStatusLabels[candStatus]}
                             </span>
                             {c.offered_price != null ? (
-                              <span className="text-[10px] font-medium text-green-500">
+                              <span className="text-sm font-bold text-green-500">
                                 R$ {c.offered_price.toFixed(2)}
                               </span>
                             ) : (
-                              <span className="text-[10px] text-contrast/50 italic">Aguardando valor</span>
+                              <span className="text-xs text-contrast/50 italic">Aguardando valor</span>
                             )}
                           </div>
-                          {t.status === "searching_drivers" && candStatus === "pending" && (
+                          {t.status === "searching_drivers" && candStatus === "accepted" && (
                             <button
-                              onClick={() => handleSelectDriver(c)}
-                              disabled={c.offered_price == null}
-                              className="mt-1.5 px-2 py-0.5 rounded text-[10px] font-heading font-bold bg-accent text-background hover:bg-accent-dark transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                              onClick={() => handleApproveCandidate(c.driver_profile_id, !c.admin_approved)}
+                              className={`mt-2 px-3 py-1.5 rounded text-xs font-heading font-bold transition-colors cursor-pointer ${
+                                c.admin_approved
+                                  ? "bg-green-500/20 text-green-600 hover:bg-red-500/20 hover:text-red-600"
+                                  : "bg-surface-hover text-contrast hover:bg-accent/20 hover:text-accent"
+                              }`}
                             >
-                              Selecionar
+                              {c.admin_approved ? "Aprovado ✓" : "Aprovar para cliente"}
                             </button>
                           )}
                         </div>
                         {/* Only show manual accept/reject for non-searching_drivers statuses */}
                         {t.status !== "searching_drivers" && (
-                          <div className="flex items-center gap-1 shrink-0">
+                          <div className="flex items-center gap-1.5 shrink-0">
                             {candStatus !== "accepted" && (
                               <button
                                 onClick={() => handleUpdateCandidateStatus(c.driver_profile_id, "accepted")}
-                                className="text-contrast hover:text-accent transition-colors cursor-pointer"
+                                className="w-8 h-8 rounded-lg flex items-center justify-center text-contrast hover:text-accent hover:bg-accent/10 transition-colors cursor-pointer"
                                 aria-label="Marcar como aceito"
                                 title="Marcar como aceito"
                               >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                   <polyline points="20 6 9 17 4 12" />
                                 </svg>
                               </button>
@@ -605,11 +700,11 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                             {candStatus !== "rejected" && (
                               <button
                                 onClick={() => handleUpdateCandidateStatus(c.driver_profile_id, "rejected")}
-                                className="text-contrast hover:text-danger transition-colors cursor-pointer"
+                                className="w-8 h-8 rounded-lg flex items-center justify-center text-contrast hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer"
                                 aria-label="Marcar como rejeitado"
                                 title="Marcar como rejeitado"
                               >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                   <line x1="18" y1="6" x2="6" y2="18" />
                                   <line x1="6" y1="6" x2="18" y2="18" />
                                 </svg>
@@ -618,11 +713,11 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                             {candStatus !== "pending" && (
                               <button
                                 onClick={() => handleUpdateCandidateStatus(c.driver_profile_id, "pending")}
-                                className="text-contrast hover:text-primary transition-colors cursor-pointer"
+                                className="w-8 h-8 rounded-lg flex items-center justify-center text-contrast hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
                                 aria-label="Voltar para pendente"
                                 title="Voltar para pendente"
                               >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                   <path d="M3 12a9 9 0 1 0 9-9" />
                                   <polyline points="3 4 3 10 9 10" />
                                 </svg>
@@ -630,11 +725,11 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                             )}
                             <button
                               onClick={() => handleRemoveCandidate(c.driver_profile_id)}
-                              className="ml-1 pl-1 border-l border-border text-contrast hover:text-danger transition-colors cursor-pointer"
+                              className="w-8 h-8 rounded-lg flex items-center justify-center text-contrast hover:text-danger hover:bg-danger/10 border-l border-border ml-1 pl-2 transition-colors cursor-pointer"
                               aria-label="Remover candidato"
                               title="Remover candidato"
                             >
-                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <polyline points="3 6 5 6 21 6" />
                                 <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6" />
                                 <path d="M10 11v6" />

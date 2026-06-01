@@ -103,21 +103,13 @@ function CardItem({
       )}
 
       {/* Action buttons */}
-      <div className="flex gap-2 mt-3">
+      <div className="mt-3">
         <button
           onClick={() => onCardClick?.(card)}
-          className="flex-1 text-xs py-2 rounded-lg bg-surface border border-border text-dark font-medium hover:bg-background transition-colors"
+          className="w-full text-xs py-2 rounded-lg bg-surface border border-border text-dark font-medium hover:bg-background transition-colors"
         >
           Ver detalhes
         </button>
-        {column.actionLabel && column.nextColumnId && (
-          <button
-            onClick={() => onMoveCard(card.id, column.id, column.nextColumnId!)}
-            className="flex-1 text-xs py-2 rounded-lg bg-primary text-background font-semibold hover:opacity-90 transition-opacity"
-          >
-            {column.actionLabel} →
-          </button>
-        )}
       </div>
     </div>
   );
@@ -137,10 +129,10 @@ export default function KanbanListView({
     col.cards.map((card) => ({ card, column: col }))
   );
 
-  // Filter by selected status
+  // Filter by selected status — "all" excludes cancelled (see "Canceladas" tab)
   const filtered =
     selectedStatus === "all"
-      ? allCards
+      ? allCards.filter(({ column }) => column.id !== "cancelled")
       : allCards.filter(({ column }) => column.id === selectedStatus);
 
   return (

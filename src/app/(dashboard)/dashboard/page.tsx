@@ -405,7 +405,7 @@ export default function DashboardPage() {
           color: "#f97316",
         },
         {
-          label: "Aguardando confirmação do motorista",
+          label: "Aguardando validação do motorista",
           count: data.alertAwaitingDriver,
           href: "/viagens",
           color: "#FEBF22",
@@ -437,7 +437,7 @@ export default function DashboardPage() {
     { label: "Em análise", statuses: ["under_review"], color: "#94A3B8" },
     { label: "Buscando motorista", statuses: ["searching_drivers"], color: "#2261FE" },
     {
-      label: "Aguard. confirmação",
+      label: "Cliente/validação",
       statuses: ["awaiting_client_confirmation", "awaiting_driver_confirmation"],
       color: "#f97316",
     },

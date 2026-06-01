@@ -7,12 +7,20 @@ import TripDetailModal from "@/components/TripDetailModal";
 import NovaViagemForm from "@/components/forms/NovaViagemForm";
 import { useToast } from "@/components/Toast";
 import { fetchTrips, updateTripStatus } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
+import {
+  labelForTripStatus,
+  requestNotificationPermission,
+  showNotification,
+} from "@/lib/notifications";
 import type { Trip, TripStatus } from "@/types/database";
 
 const tripColumnConfig: { id: TripStatus; title: string; color: string }[] = [
   { id: "open", title: "Aberta", color: "#FEBF22" },
   { id: "under_review", title: "Em Análise", color: "#5C5956" },
   { id: "searching_drivers", title: "Buscando Motorista", color: "#2261FE" },
+  { id: "awaiting_client_confirmation", title: "Aguardando Cliente", color: "#f97316" },
+  { id: "awaiting_driver_confirmation", title: "Aguardando Validação Motorista", color: "#f97316" },
   { id: "scheduled", title: "Agendada", color: "#2261FE" },
   { id: "started", title: "Em Andamento", color: "#22c55e" },
   { id: "finished", title: "Finalizada", color: "#22c55e" },
@@ -55,6 +63,53 @@ export default function ViagensPage() {
 
   useEffect(() => {
     loadTrips();
+  }, [loadTrips]);
+
+  useEffect(() => {
+    requestNotificationPermission();
+  }, []);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("trips-board")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "trips" },
+        (payload) => {
+          const next = payload.new as Trip;
+          showNotification(
+            "Nova viagem solicitada",
+            `Status: ${labelForTripStatus(next.status)}`
+          );
+          loadTrips();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "trips" },
+        (payload) => {
+          const next = payload.new as Trip;
+          const prev = payload.old as Partial<Trip>;
+          // payload.old só carrega colunas alteradas (REPLICA IDENTITY DEFAULT).
+          // Notificar apenas quando status estiver presente em old (mudou de fato).
+          if (prev.status !== undefined && prev.status !== next.status) {
+            showNotification(
+              "Viagem atualizada",
+              `Status: ${labelForTripStatus(prev.status)} → ${labelForTripStatus(next.status)}`
+            );
+          }
+          loadTrips();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "trips" },
+        () => loadTrips()
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [loadTrips]);
 
   const handleCardMove = useCallback(
@@ -101,7 +156,9 @@ export default function ViagensPage() {
   const listActionConfig: Record<string, { actionLabel: string; nextColumnId: string }> = {
     open: { actionLabel: "Aprovar", nextColumnId: "under_review" },
     under_review: { actionLabel: "Buscar Motorista", nextColumnId: "searching_drivers" },
-    searching_drivers: { actionLabel: "Agendar", nextColumnId: "scheduled" },
+    searching_drivers: { actionLabel: "Aguardar cliente", nextColumnId: "awaiting_client_confirmation" },
+    awaiting_client_confirmation: { actionLabel: "Validar motorista", nextColumnId: "awaiting_driver_confirmation" },
+    awaiting_driver_confirmation: { actionLabel: "Agendar", nextColumnId: "scheduled" },
     scheduled: { actionLabel: "Iniciar", nextColumnId: "started" },
     started: { actionLabel: "Finalizar", nextColumnId: "finished" },
   };
@@ -123,7 +180,7 @@ export default function ViagensPage() {
         </div>
         <button
           onClick={() => setShowForm(true)}
-          className="bg-primary text-background px-5 py-2.5 rounded-lg font-heading font-bold text-sm hover:bg-primary-dark transition-colors duration-200 cursor-pointer"
+          className="bg-primary text-background px-3 py-2 md:px-5 md:py-2.5 rounded-lg font-heading font-bold text-xs md:text-sm whitespace-nowrap hover:bg-primary-dark transition-colors duration-200 cursor-pointer"
         >
           + Nova Viagem
         </button>
