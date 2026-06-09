@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { fetchDriverProfiles, fetchVehiclesByDriver } from "@/lib/api";
+import { fetchDriverProfiles, fetchVehiclesByDriver, deleteUserById } from "@/lib/api";
+import { useToast } from "@/components/Toast";
 import type { DriverProfile, Vehicle, ProviderStatus } from "@/types/database";
 import NovoMotoristaForm from "@/components/forms/NovoMotoristaForm";
 
@@ -39,8 +40,10 @@ interface DriverWithVehicle extends DriverProfile {
 }
 
 export default function MotoristasPage() {
+  const { toast } = useToast();
   const [drivers, setDrivers] = useState<DriverWithVehicle[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -72,6 +75,32 @@ export default function MotoristasPage() {
   useEffect(() => {
     loadDrivers();
   }, [loadDrivers]);
+
+  async function handleDeleteDriver(driver: DriverWithVehicle) {
+    const userId = driver.provider_profiles?.users?.id;
+    const name = driver.provider_profiles?.users?.full_name ?? "este motorista";
+    if (!userId) {
+      toast("danger", "Não foi possível localizar o usuário do motorista.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Excluir ${name}? Essa ação apaga o motorista, veículo e perfil de acesso.`
+    );
+    if (!confirmed) return;
+
+    setDeletingUserId(userId);
+    try {
+      await deleteUserById(userId);
+      toast("success", "Motorista excluído com sucesso.");
+      await loadDrivers();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      toast("danger", message || "Erro ao excluir motorista.");
+    } finally {
+      setDeletingUserId(null);
+    }
+  }
 
   const filtered = drivers.filter((d) => {
     const name = d.provider_profiles?.users?.full_name ?? "";
@@ -185,11 +214,12 @@ export default function MotoristasPage() {
             const name = driver.provider_profiles?.users?.full_name ?? "Sem nome";
             const phone = driver.provider_profiles?.users?.phone ?? "—";
             const status = (driver.provider_profiles?.status ?? "pending") as ProviderStatus;
+            const userId = driver.provider_profiles?.users?.id;
 
             return (
               <div
                 key={driver.id}
-                className="bg-surface rounded-xl border border-border p-4 flex items-center gap-3 cursor-pointer hover:border-primary transition-colors"
+                className="bg-surface rounded-xl border border-border p-4 flex items-center gap-3 hover:border-primary transition-colors"
               >
                 <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-background text-sm font-semibold flex-shrink-0">
                   {getInitials(name)}
@@ -207,19 +237,28 @@ export default function MotoristasPage() {
                 >
                   {statusLabels[status]}
                 </span>
-                <svg
-                  className="w-4 h-4 text-muted flex-shrink-0"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
+                <button
+                  type="button"
+                  onClick={() => handleDeleteDriver(driver)}
+                  disabled={!userId || deletingUserId === userId}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-danger/30 text-danger hover:bg-danger/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label={`Excluir ${name}`}
+                  title="Excluir motorista"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M9 5l7 7-7 7"
-                  />
-                </svg>
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M3 6h18M8 6V4h8v2m-7 0h6m-8 0 1 14h8l1-14"
+                    />
+                  </svg>
+                </button>
               </div>
             );
           })}
@@ -249,6 +288,9 @@ export default function MotoristasPage() {
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-contrast uppercase tracking-wider">
                     Avaliação
                   </th>
+                  <th className="text-right px-5 py-3.5 text-xs font-semibold text-contrast uppercase tracking-wider">
+                    Ações
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -257,11 +299,12 @@ export default function MotoristasPage() {
                   const phone = driver.provider_profiles?.users?.phone ?? "—";
                   const status = (driver.provider_profiles?.status ?? "pending") as ProviderStatus;
                   const rating = driver.provider_profiles?.average_rating ?? 0;
+                  const userId = driver.provider_profiles?.users?.id;
 
                   return (
                     <tr
                       key={driver.id}
-                      className="hover:bg-surface-hover/50 transition-colors cursor-pointer"
+                      className="hover:bg-surface-hover/50 transition-colors"
                     >
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
@@ -307,6 +350,29 @@ export default function MotoristasPage() {
                       </td>
                       <td className="px-5 py-3.5 text-sm text-contrast">
                         {rating > 0 ? `⭐ ${rating.toFixed(1)}` : "—"}
+                      </td>
+                      <td className="px-5 py-3.5 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteDriver(driver)}
+                          disabled={!userId || deletingUserId === userId}
+                          className="inline-flex items-center gap-2 rounded-lg border border-danger/30 px-3 py-2 text-xs font-medium text-danger hover:bg-danger/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M3 6h18M8 6V4h8v2m-7 0h6m-8 0 1 14h8l1-14"
+                            />
+                          </svg>
+                          {deletingUserId === userId ? "Excluindo..." : "Excluir"}
+                        </button>
                       </td>
                     </tr>
                   );

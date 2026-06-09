@@ -32,6 +32,7 @@ export default function NovoClienteForm({
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [cpf, setCpf] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
@@ -39,6 +40,7 @@ export default function NovoClienteForm({
   function resetForm() {
     setFullName("");
     setEmail("");
+    setPassword("");
     setPhone("");
     setCpf("");
     setDateOfBirth("");
@@ -48,8 +50,13 @@ export default function NovoClienteForm({
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!fullName || !email) {
+    if (!fullName || !email || !password) {
       toast("warning", "Preencha todos os campos obrigatórios");
+      return;
+    }
+
+    if (password.length < 6) {
+      toast("warning", "A senha deve ter pelo menos 6 caracteres");
       return;
     }
 
@@ -60,6 +67,7 @@ export default function NovoClienteForm({
       await createUser({
         full_name: fullName,
         email,
+        password,
         phone: phone || null,
         cpf: cpf || null,
         role: "client",
@@ -146,6 +154,21 @@ export default function NovoClienteForm({
         {emailError && (
           <p className="mt-1 text-xs text-danger font-body">{emailError}</p>
         )}
+      </div>
+
+      <div>
+        <label htmlFor="client-password" className={labelClass}>
+          Senha *
+        </label>
+        <input
+          id="client-password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Mínimo 6 caracteres"
+          className={inputClass}
+          autoComplete="new-password"
+        />
       </div>
 
       <div>

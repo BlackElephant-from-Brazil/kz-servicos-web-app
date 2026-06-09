@@ -39,6 +39,7 @@ export default function NovoMotoristaForm({
   // Dados do motorista
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [cpf, setCpf] = useState("");
 
@@ -58,6 +59,7 @@ export default function NovoMotoristaForm({
   function resetForm() {
     setFullName("");
     setEmail("");
+    setPassword("");
     setPhone("");
     setCpf("");
     setCnhNumber("");
@@ -74,8 +76,38 @@ export default function NovoMotoristaForm({
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!fullName || !email) {
+    if (!fullName || !email || !password) {
       toast("warning", "Preencha todos os campos obrigatórios");
+      return;
+    }
+
+    if (password.length < 6) {
+      toast("warning", "A senha deve ter pelo menos 6 caracteres");
+      return;
+    }
+
+    const hasVehicle =
+      brand ||
+      model ||
+      year ||
+      color ||
+      licensePlate ||
+      passengerCapacity;
+    const vehicleYear = Number(year);
+
+    if (
+      hasVehicle &&
+      (!brand ||
+        !model ||
+        !year ||
+        !Number.isFinite(vehicleYear) ||
+        !color ||
+        !licensePlate)
+    ) {
+      toast(
+        "warning",
+        "Preencha marca, modelo, ano, cor e placa do veículo."
+      );
       return;
     }
 
@@ -86,6 +118,7 @@ export default function NovoMotoristaForm({
       const user = await createUser({
         full_name: fullName,
         email,
+        password,
         phone: phone || null,
         cpf: cpf || null,
         role: "provider",
@@ -103,6 +136,7 @@ export default function NovoMotoristaForm({
       const profile = await createProviderProfile({
         user_id: user.id,
         service_category_id: tripCategory.id,
+        status: "approved",
       });
 
       // 4. Create driver profile
@@ -111,18 +145,18 @@ export default function NovoMotoristaForm({
         cnh_number: cnhNumber || null,
         cnh_category: cnhCategory || null,
         cnh_expiration_date: cnhExpiration || null,
+        is_available: true,
       });
 
       // 5. Create vehicle if any field is filled
-      const hasVehicle = brand || model || year || color || licensePlate;
       if (hasVehicle) {
         await createVehicle({
           driver_profile_id: driverProfile.id,
-          brand: brand || "",
-          model: model || "",
-          year: Number(year) || new Date().getFullYear(),
-          color: color || "",
-          license_plate: licensePlate || "",
+          brand,
+          model,
+          year: vehicleYear,
+          color,
+          license_plate: licensePlate,
           passenger_capacity: Number(passengerCapacity) || 4,
         });
       }
@@ -210,6 +244,21 @@ export default function NovoMotoristaForm({
           {emailError && (
             <p className="mt-1 text-xs text-danger font-body">{emailError}</p>
           )}
+        </div>
+
+        <div>
+          <label htmlFor="driver-password" className={labelClass}>
+            Senha de acesso *
+          </label>
+          <input
+            id="driver-password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Mínimo 6 caracteres"
+            className={inputClass}
+            autoComplete="new-password"
+          />
         </div>
 
         <div>
@@ -380,6 +429,7 @@ export default function NovoMotoristaForm({
             />
           </div>
         </div>
+
       </form>
     </SlidePanel>
   );
