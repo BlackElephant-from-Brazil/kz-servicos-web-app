@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { fetchClients } from "@/lib/api";
+import { fetchClients, deleteUserById } from "@/lib/api";
+import { useToast } from "@/components/Toast";
 import type { User } from "@/types/database";
 import NovoClienteForm from "@/components/forms/NovoClienteForm";
 
@@ -20,8 +21,10 @@ function getInitials(name: string): string {
 }
 
 export default function ClientesPage() {
+  const { toast } = useToast();
   const [clients, setClients] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [viewMode, setViewMode] = useState<"cards" | "table">(() =>
@@ -39,6 +42,26 @@ export default function ClientesPage() {
   useEffect(() => {
     loadClients();
   }, [loadClients]);
+
+  async function handleDeleteClient(client: User) {
+    const name = client.full_name || client.email;
+    const confirmed = window.confirm(
+      `Excluir ${name}? Essa ação apaga o cliente e o acesso ao app.`
+    );
+    if (!confirmed) return;
+
+    setDeletingUserId(client.id);
+    try {
+      await deleteUserById(client.id);
+      toast("success", "Cliente excluído com sucesso.");
+      await loadClients();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      toast("danger", message || "Erro ao excluir cliente.");
+    } finally {
+      setDeletingUserId(null);
+    }
+  }
 
   const filtered = clients.filter((c) => {
     const q = search.toLowerCase();
@@ -138,7 +161,7 @@ export default function ClientesPage() {
           {filtered.map((client) => (
             <div
               key={client.id}
-              className="bg-surface rounded-xl border border-border p-4 flex items-center gap-3 cursor-pointer hover:border-primary transition-colors"
+              className="bg-surface rounded-xl border border-border p-4 flex items-center gap-3 hover:border-primary transition-colors"
             >
               <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-background text-sm font-semibold flex-shrink-0">
                 {getInitials(client.full_name || client.email)}
@@ -149,19 +172,28 @@ export default function ClientesPage() {
                 </p>
                 <p className="text-muted text-xs truncate">{client.email}</p>
               </div>
-              <svg
-                className="w-4 h-4 text-muted flex-shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
+              <button
+                type="button"
+                onClick={() => handleDeleteClient(client)}
+                disabled={deletingUserId === client.id}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-danger/30 text-danger hover:bg-danger/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label={`Excluir ${client.full_name || client.email}`}
+                title="Excluir cliente"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M9 5l7 7-7 7"
-                />
-              </svg>
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M3 6h18M8 6V4h8v2m-7 0h6m-8 0 1 14h8l1-14"
+                  />
+                </svg>
+              </button>
             </div>
           ))}
         </div>
@@ -186,13 +218,16 @@ export default function ClientesPage() {
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-contrast uppercase tracking-wider">
                     Cadastro
                   </th>
+                  <th className="text-right px-5 py-3.5 text-xs font-semibold text-contrast uppercase tracking-wider">
+                    Ações
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {filtered.map((client) => (
                   <tr
                     key={client.id}
-                    className="hover:bg-surface-hover/50 transition-colors cursor-pointer"
+                    className="hover:bg-surface-hover/50 transition-colors"
                   >
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-3">
@@ -234,6 +269,29 @@ export default function ClientesPage() {
                     </td>
                     <td className="px-5 py-3.5 text-sm text-contrast">
                       {formatDate(client.created_at)}
+                    </td>
+                    <td className="px-5 py-3.5 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteClient(client)}
+                        disabled={deletingUserId === client.id}
+                        className="inline-flex items-center gap-2 rounded-lg border border-danger/30 px-3 py-2 text-xs font-medium text-danger hover:bg-danger/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M3 6h18M8 6V4h8v2m-7 0h6m-8 0 1 14h8l1-14"
+                          />
+                        </svg>
+                        {deletingUserId === client.id ? "Excluindo..." : "Excluir"}
+                      </button>
                     </td>
                   </tr>
                 ))}

@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
   try {
     const supabaseAdmin = getSupabaseAdmin();
     const body = await request.json();
-    const { full_name, email, phone, cpf, role, date_of_birth } = body;
+    const { full_name, email, password, phone, cpf, role, date_of_birth } = body;
 
     if (!full_name || !email || !role) {
       return NextResponse.json(
@@ -25,7 +25,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const senha_temporaria = generateTemporaryPassword();
+    if (password !== undefined && typeof password !== "string") {
+      return NextResponse.json(
+        { error: "A senha deve ser um texto" },
+        { status: 400 }
+      );
+    }
+
+    if (password && password.length < 6) {
+      return NextResponse.json(
+        { error: "A senha deve ter pelo menos 6 caracteres" },
+        { status: 400 }
+      );
+    }
+
+    if (role === "client" && !password) {
+      return NextResponse.json(
+        { error: "Clientes exigem senha" },
+        { status: 400 }
+      );
+    }
+
+    const senha_temporaria = password || generateTemporaryPassword();
+    const hasCustomPassword = Boolean(password);
 
     // 1. Create user in Supabase Auth
     const { data: authData, error: authError } =
@@ -33,7 +55,7 @@ export async function POST(request: NextRequest) {
         email,
         password: senha_temporaria,
         email_confirm: true,
-        user_metadata: { full_name, password_temporary: true },
+        user_metadata: { full_name, password_temporary: !hasCustomPassword },
       });
 
     if (authError) {
@@ -43,10 +65,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 2. Insert profile into public.users
+    // 2. Upsert profile into public.users.
+    // The auth.users trigger may already have created this row.
     const { data, error } = await supabaseAdmin
       .from("users")
-      .insert({
+      .upsert({
         id: authData.user.id,
         full_name,
         email,
@@ -55,7 +78,7 @@ export async function POST(request: NextRequest) {
         role,
         date_of_birth: date_of_birth || null,
         is_active: true,
-      })
+      }, { onConflict: "id" })
       .select()
       .single();
 
@@ -65,12 +88,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    // 3. Send invite email via webhook (fire-and-forget, don't fail registration if webhook fails)
-    fetch(INVITE_WEBHOOK_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nome: full_name, email, senha_temporaria }),
-    }).catch(() => {});
+    // 3. Send invite email only when the system generated a temporary password.
+    if (!hasCustomPassword) {
+      fetch(INVITE_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nome: full_name, email, senha_temporaria }),
+      }).catch(() => {});
+    }
 
     return NextResponse.json(data, { status: 201 });
   } catch {

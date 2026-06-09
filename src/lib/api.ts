@@ -13,6 +13,7 @@ import type {
   Vehicle,
   Address,
   ServiceCategory,
+  ProviderStatus,
   Debito,
   PaymentMethod,
   AdminLog,
@@ -799,6 +800,7 @@ export async function createServiceRequest(req: {
 export async function createUser(user: {
   full_name: string;
   email: string;
+  password?: string;
   phone?: string | null;
   cpf?: string | null;
   role: string;
@@ -814,17 +816,27 @@ export async function createUser(user: {
   return data as User;
 }
 
+// ─── Delete User ───────────────────────────────────────────
+export async function deleteUserById(id: string): Promise<void> {
+  const res = await fetch(`/api/users/${id}`, {
+    method: "DELETE",
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Erro ao excluir usuário");
+}
+
 // ─── Create Provider Profile ───────────────────────────────
 export async function createProviderProfile(profile: {
   user_id: string;
   service_category_id: string;
+  status?: ProviderStatus;
   bio?: string | null;
   has_card_machine?: boolean;
   issues_invoice?: boolean;
 }) {
   const { data, error } = await supabase
     .from("provider_profiles")
-    .insert({ ...profile, status: "pending" })
+    .insert({ ...profile, status: profile.status ?? "pending" })
     .select()
     .single();
   if (error) throw error;
@@ -837,10 +849,11 @@ export async function createDriverProfile(profile: {
   cnh_number?: string | null;
   cnh_category?: string | null;
   cnh_expiration_date?: string | null;
+  is_available?: boolean;
 }) {
   const { data, error } = await supabase
     .from("driver_profiles")
-    .insert({ ...profile, is_available: false })
+    .insert({ ...profile, is_available: profile.is_available ?? false })
     .select()
     .single();
   if (error) throw error;
@@ -855,11 +868,12 @@ export async function createVehicle(vehicle: {
   year: number;
   color: string;
   license_plate: string;
+  vehicle_document_url?: string;
   passenger_capacity: number;
 }) {
   const { data, error } = await supabase
     .from("vehicles")
-    .insert({ ...vehicle, is_active: true })
+    .insert({ ...vehicle, vehicle_document_url: vehicle.vehicle_document_url ?? "", is_active: true })
     .select()
     .single();
   if (error) throw error;
